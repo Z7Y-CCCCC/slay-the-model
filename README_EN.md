@@ -6,7 +6,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/wkzMagician/slay-the-model.svg)](https://github.com/wkzMagician/slay-the-model/stargazers)
+[![Stars](https://img.shields.io/github/stars/zhujiayu999/slay-the-model.svg)](https://github.com/zhujiayu999/slay-the-model/stargazers)
 
 **English | [中文](README.md)**
 
@@ -95,7 +95,7 @@ slay-the-model/
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/wkzMagician/slay-the-model.git
+git clone https://github.com/zhujiayu999/slay-the-model.git
 cd slay-the-model
 ```
 
@@ -207,6 +207,8 @@ The framework provides clear state/action interfaces, easy to integrate with RL 
 
 #### 🐛 Bug Fixes (High Priority)
 
+- [x] Fixed Neow's Blessing not taking effect (Fixed in df7442f)
+- [x] Fixed Mutagenic Strength not properly losing strength at the end of the 1st turn (Fixed in 7a04ae6)
 - [ ] Fix localization display issues
 - [ ] Improve error handling
 - [ ] Verify and fix card effects
@@ -281,6 +283,6 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) file for 
 
 <div align="center">
 
-**Made with ❤️ by wkzMagician**
+**Made with ❤️ by zhujiayu999**
 
 </div>

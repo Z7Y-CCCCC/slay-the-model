@@ -6,7 +6,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/wkzMagician/slay-the-model.svg)](https://github.com/wkzMagician/slay-the-model/stargazers)
+[![Stars](https://img.shields.io/github/stars/zhujiayu999/slay-the-model.svg)](https://github.com/zhujiayu999/slay-the-model/stargazers)
 
 **[English](README_EN.md) | 中文**
 
@@ -95,7 +95,7 @@ slay-the-model/
 
 1. **克隆仓库**
 ```bash
-git clone https://github.com/wkzMagician/slay-the-model.git
+git clone https://github.com/zhujiayu999/slay-the-model.git
 cd slay-the-model
 ```
 
@@ -207,6 +207,8 @@ python __main__.py --no-tui
 
 #### 🐛 Bug 修复 (High Priority)
 
+- [x] 涅奥的祝福没有效果修复 (Fixed in df7442f)
+- [x] 变异之力（Mutagenic Strength）在第一回合结束未正确失去力量修复 (Fixed in 7a04ae6)
 - [ ] 本地化显示问题修复
 - [ ] 错误处理优化
 - [ ] 卡牌效果校对与修复
@@ -281,6 +283,6 @@ python __main__.py --no-tui
 
 <div align="center">
 
-**Made with ❤️ by wkzMagician**
+**Made with ❤️ by zhujiayu999**
 
 </div>
