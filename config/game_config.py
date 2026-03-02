@@ -14,6 +14,7 @@ class GameConfig:
             "auto_select": False,  # Auto select for all modes (human, ai, debug)
             "human": {
                 "show_menu_option": True,
+                "ai_coach": True,
             },
             "ai": {
                 "api_key": os.environ.get("OPENAI_API_KEY", ""),
@@ -28,6 +29,9 @@ class GameConfig:
                 "print": False,
                 "select_type": "random",
                 "god_mode": False,
+            },
+            "gameplay": {
+                "enable_combat_challenges": True,
             },
         }
 
@@ -49,6 +53,7 @@ class GameConfig:
         self.human = defaults["human"]
         self.ai = defaults["ai"]
         self.debug = defaults["debug"]
+        self.gameplay = defaults["gameplay"]
 
     def get(self, key, default=None):
         """Dict-like access for compatibility with config.get usage.
@@ -67,8 +72,23 @@ class GameConfig:
 
     @staticmethod
     def load(config_path):
-        if os.path.exists(config_path):
-            with open(config_path, "r") as f:
+        import shutil
+        template_path = os.path.join(os.path.dirname(config_path), "game_config_template.yaml")
+        
+        if not os.path.exists(config_path):
+            if os.path.exists(template_path):
+                print(f"Config file not found. Creating {config_path} from template...")
+                shutil.copy2(template_path, config_path)
+            else:
+                print("Warning: Neither config file nor template found. Using defaults.")
+                return GameConfig()
+
+        try:
+            with open(config_path, "r", encoding='utf-8') as f:
                 data = yaml.safe_load(f)
+                if data is None:
+                    return GameConfig()
                 return GameConfig(**data)
-        return GameConfig()
+        except Exception as e:
+            print(f"Error loading config: {e}. Using defaults.")
+            return GameConfig()

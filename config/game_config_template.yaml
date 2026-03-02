@@ -1,5 +1,5 @@
-mode: debug # human | ai | debug
-language: en
+mode: human # human | ai | debug
+language: zh # zh | en
 seed: 1
 character: Ironclad
 ascension: 0  # 0-20, 0 = no ascension
@@ -8,17 +8,23 @@ auto_select: True  # Auto select for all modes (human, ai, debug)
 
 human:
   show_menu_option: False
+  ai_coach: True
 
 ai:
-  api_key: YOUR_API_KEY
-  api_base: YOUR_MODEL_API_BASE
-  model: YOUR_MODEL
-  stream: True
+  api_key: "YOUR_API_KEY_HERE"
+  api_base: "https://api.openai.com/v1"
+  model: "gpt-4o"
+  stream: False
   temperature: 0.7
-  max_tokens: 8192
-  timeout: 60
+  max_tokens: 512
+  max_thinking_tokens: 100
+  request_delay: 0
+  timeout: 30
 
 debug:
   print: False
   select_type: random
   god_mode: False  # If True, set all enemies to 1 HP at combat start
+
+gameplay:
+  enable_combat_challenges: True
