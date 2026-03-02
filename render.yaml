@@ -1,0 +1,11 @@
+services:
+  - type: worker
+    name: slay-the-model-worker
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: |
+      if [ ! -f config/game_config.yaml ]; then
+        cp config/game_config_template.yaml config/game_config.yaml
+      fi
+      python __main__.py --no-tui
