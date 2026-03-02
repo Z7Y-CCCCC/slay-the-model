@@ -183,6 +183,30 @@ python __main__.py --no-tui
 
 ---
 
+### 📦 Release & Packaging
+
+#### Running the Release Version
+
+1. Download the latest release from the [Releases](https://github.com/zhujiayu999/slay-the-model/releases) page.
+2. Extract the files and run `slay-the-model.exe` directly.
+3. **Note**: On the first run, the app will look for `config/game_config.yaml`. The executable bundles internal assets but allows external configuration.
+
+#### Developer Packaging Steps
+
+To build the executable yourself:
+
+1. Install PyInstaller:
+   ```bash
+   pip install pyinstaller
+   ```
+2. Build using the provided spec file:
+   ```bash
+   pyinstaller slay-the-model.spec
+   ```
+3. The resulting executable will be in `dist/slay-the-model.exe`.
+
+---
+
 ### 🔬 Research Applications
 
 #### Parallel Experiments

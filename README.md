@@ -183,6 +183,30 @@ python __main__.py --no-tui
 
 ---
 
+### 📦 发布与打包
+
+#### 运行发布版本 (Release)
+
+1. 在 [Releases](https://github.com/zhujiayu999/slay-the-model/releases) 页面下载最新版本的压缩包。
+2. 解压后直接运行 `slay-the-model.exe` 即可开始游戏。
+3. **注意**：首次运行会自动在同级目录生成 `config/game_config.yaml`（如果是从源码打包）。发布版固化了资源，但仍会读取外部配置。
+
+#### 开发者打包步骤
+
+如果你想自行打包成可执行文件：
+
+1. 安装 PyInstaller:
+   ```bash
+   pip install pyinstaller
+   ```
+2. 使用提供的 spec 文件进行打包:
+   ```bash
+   pyinstaller slay-the-model.spec
+   ```
+3. 打包完成后，可执行文件位于 `dist/slay-the-model.exe`。
+
+---
+
 ### 🔬 研究用途
 
 #### 并行实验
