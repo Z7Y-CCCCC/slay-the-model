@@ -92,7 +92,7 @@ def test_map_generation():
         print("FAILURE: Some constraints failed!")
     print("=" * 60)
     
-    return all_checks
+    # Keep this as a diagnostic smoke test (no assertion here by design).
 
 if __name__ == "__main__":
     test_map_generation()

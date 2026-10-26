@@ -31,8 +31,11 @@ class EventRoom(Room):
         super().__init__(**kwargs)
         self.room_type = RoomType.EVENT
         
-        # The randomly selected event for this room (only one)
+        # Keep a list for backward compatibility with previous room flow.
+        self.available_events = []
+        # The currently selected/active event in this room.
         self.selected_event = None
+        self.triggered_event = None
     
     def init(self):
         """
@@ -43,13 +46,14 @@ class EventRoom(Room):
         from engine.game_state import game_state
         import events  # Ensure all @register_event decorators are loaded.
         
-        # Get a single random event from the current Act's pool
+        # Get random event(s) from the current Act's pool.
         selected_events = get_random_events(
             act=game_state.current_act,
             count=1
         )
         
         if selected_events:
+            self.available_events = selected_events
             self.selected_event = selected_events[0]
         else:
             # No events available, create a fallback event
@@ -68,12 +72,47 @@ class EventRoom(Room):
             default="You encounter a mysterious event...",
         )
 
-        # Check if we have an event
-        if not self.selected_event:
+        # Check if we have any event.
+        if not self.available_events and not self.selected_event:
             # No event available, just return the display action
             return SingleActionResult(display_action)
 
-        # Directly trigger the selected event
+        # Prefer selected_event if already fixed; otherwise resolve from available list.
+        if self.selected_event is None and self.available_events:
+            self.selected_event = self.available_events[0]
+
+        # If multiple events are available, provide explicit selection first.
+        if len(self.available_events) > 1:
+            from actions.base import Action
+            from actions.display import SelectAction
+            from utils.option import Option
+
+            room = self
+
+            class TriggerEventAction(Action):
+                def __init__(self, event_to_trigger):
+                    self._event_to_trigger = event_to_trigger
+
+                def execute(self):
+                    return room._trigger_event(self._event_to_trigger)
+
+            options = []
+            for event in self.available_events:
+                if hasattr(event, "local"):
+                    name = event.local("name")
+                else:
+                    name = str(event)
+                options.append(Option(name=name, actions=[TriggerEventAction(event)]))
+
+            select_action = SelectAction(
+                title="rooms.event.choose",
+                options=options,
+                max_select=1,
+                must_select=True,
+            )
+            return MultipleActionsResult([display_action, select_action])
+
+        # Directly trigger the selected event.
         event_result = self._trigger_event(self.selected_event)
         return self._merge_display_with_result(display_action, event_result)
     
@@ -126,7 +165,9 @@ class EventRoom(Room):
                     )
                 )
 
-        self.selected_event = FallbackEvent()
+        fallback_event = FallbackEvent()
+        self.available_events = [fallback_event]
+        self.selected_event = fallback_event
 
     def _merge_display_with_result(
         self, display_action: DisplayTextAction, event_result: BaseResult

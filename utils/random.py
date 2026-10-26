@@ -365,17 +365,56 @@ def get_random_events(act: int = 1, count: int = 1) -> List[Any]:
     if not available_metadata:
         return []
     
-    # Get specified count of events
-    if count >= len(available_metadata):
-        # Return all available if count exceeds available
-        selected_metadata = available_metadata
-    else:
-        # Random weighted selection
-        selected_metadata = random.choices(
-            available_metadata,
-            weights=[m.weight for m in available_metadata],
-            k=count
-        )
+    def _event_context_multiplier(event_id: str) -> float:
+        """Adaptive event weighting based on current deck/relic context."""
+        try:
+            from engine.game_state import game_state
+            player = game_state.player
+            deck = list(player.card_manager.get_pile("deck"))
+        except Exception:
+            return 1.0
+
+        event_key = (event_id or "").lower()
+        relic_count = len(getattr(player, "relics", []))
+        gold = getattr(player, "gold", 0)
+
+        attack_count = 0
+        curse_count = 0
+        upgradable_count = 0
+        for card in deck:
+            card_type = getattr(getattr(card, "card_type", None), "name", "")
+            if card_type == "ATTACK":
+                attack_count += 1
+            elif card_type == "CURSE":
+                curse_count += 1
+            if hasattr(card, "can_upgrade") and card.can_upgrade():
+                upgradable_count += 1
+
+        multiplier = 1.0
+        if curse_count > 0 and event_key in {"divine_fountain", "purifier", "bonfire_spirits"}:
+            multiplier += 0.8
+        if upgradable_count >= 5 and event_key in {"upgrade_shrine", "ominous_forge", "shining_light", "the_library"}:
+            multiplier += 0.6
+        if gold >= 100 and event_key in {"old_beggar", "pleading_vagrant", "woman_in_blue", "the_joust", "the_cleric"}:
+            multiplier += 0.5
+        if relic_count >= 5 and event_key in {"nloth", "face_trader", "we_meet_again"}:
+            multiplier += 0.4
+        if attack_count >= 12 and event_key in {"falling", "the_colosseum", "match_and_keep"}:
+            multiplier += 0.3
+        return max(0.1, multiplier)
+
+    # Weighted selection without replacement to improve event variety.
+    selection_count = min(count, len(available_metadata))
+    remaining_metadata = list(available_metadata)
+    selected_metadata = []
+    for _ in range(selection_count):
+        weights = [
+            max(0.01, metadata.weight * _event_context_multiplier(metadata.event_id))
+            for metadata in remaining_metadata
+        ]
+        picked = random.choices(remaining_metadata, weights=weights, k=1)[0]
+        selected_metadata.append(picked)
+        remaining_metadata.remove(picked)
     
     # Create event instances
     events = []

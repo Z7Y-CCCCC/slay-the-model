@@ -135,19 +135,22 @@ class GameFlow:
         VictoryRoom (Acts 3-4) handles its own completion via the room itself.
         Returns True if game should continue to next act.
         """
-        from utils.result_types import MultipleActionsResult
-        from rooms.treasure import TreasureRoom
-        
-        # Check if can advance to next act
-        if game_state.current_act == 4: # this means act3 finish!
+        # Act 3: keys decide whether run ends or enters Act 4.
+        if game_state.current_act == 3:
             if not game_state.has_all_keys:
-                # No keys - game victory after Act 3
                 self._handle_game_won()
                 return False
-            else:
-                # Has all keys - entering Act 4
-                tui_print(t('ui.entering_act4', 
-                       default='\nWith all three keys, you unlock the path to the Heart...'))
+            tui_print(
+                t(
+                    'ui.entering_act4',
+                    default='\nWith all three keys, you unlock the path to the Heart...',
+                )
+            )
+
+        # Act 4 completion always ends the run.
+        if game_state.current_act == 4:
+            self._handle_game_won()
+            return False
         
         # Advance to next act
         if game_state.advance_act():
@@ -166,6 +169,11 @@ class GameFlow:
         tui_print(f"{t('ui.game_awaken', default='You awaken in a strange place...')}")
         tui_print(f"{t('ui.seed_display', seed=game_state.config.seed, default=f'Seed: {game_state.config.seed}')}")
         tui_print(f"{t('ui.character_display', character=t(f'ui.character.{game_state.config.character.lower()}', default=game_state.config.character), default=f'Character: {game_state.config.character}')}\n")
+        if getattr(game_state, "daily_mode", False):
+            label = getattr(game_state, "daily_seed_label", "")
+            tui_print(f"[Daily Challenge] {label} | Seed {game_state.config.seed}")
+        if getattr(game_state, "current_replay_code", ""):
+            tui_print(f"[Replay Code] {game_state.current_replay_code}")
 
         # Update display panel with player info
         from tui import get_app, is_tui_mode
@@ -221,6 +229,7 @@ class GameFlow:
         tui_print(t('ui.death_message', default='You have fallen in the Spire...'))
         tui_print(t('ui.floor_reached', floor=game_state.current_floor, 
                default=f'Floor reached: {game_state.current_floor}'))
+        self._record_run_result(won=False)
     
     def _handle_game_exit(self):
         """Handle game exit."""
@@ -232,3 +241,26 @@ class GameFlow:
         tui_print(t('ui.game_won', default='\n=== VICTORY! ==='))
         tui_print(t('ui.victory_message', default='You have conquered the Spire!'))
         tui_print(t('ui.congratulations', default='Congratulations!'))
+        self._record_run_result(won=True)
+
+    def _record_run_result(self, won: bool):
+        """Record run result for daily challenge leaderboard."""
+        if not getattr(game_state, "daily_mode", False):
+            return
+        try:
+            from engine.daily_challenge import get_daily_label, record_daily_result
+
+            entry = {
+                "day": get_daily_label(),
+                "won": won,
+                "floor": int(game_state.current_floor) + 1,
+                "character": game_state.config.character,
+                "challenge_tokens": int(getattr(game_state, "challenge_tokens", 0)),
+                "hp_left": int(max(0, game_state.player.hp)),
+                "seed": int(game_state.config.seed),
+                "replay": getattr(game_state, "current_replay_code", ""),
+            }
+            record_daily_result(entry)
+            tui_print("[Daily] Result recorded to local leaderboard.")
+        except Exception as exc:
+            tui_print(f"[Daily] Failed to record leaderboard entry: {exc}")

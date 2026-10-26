@@ -1495,7 +1495,7 @@ class ChooseObtainCardAction(Action):
     def __init__(self, total: int = 3, namespace: Optional[str] = None, 
                  encounter_type: str = "normal", use_rolling_offset: bool = False,
                  exclude_set: Optional[List[str]] = None, pile: str = "deck",
-                 allow_upgraded: bool = False):
+                 allow_upgraded: bool = False, count: int = 1):
         self.total = total
         self.namespace = namespace
         self.encounter_type = encounter_type
@@ -1503,6 +1503,7 @@ class ChooseObtainCardAction(Action):
         self.exclude_set = exclude_set or []
         self.pile = pile
         self.allow_upgraded = allow_upgraded
+        self.count = count # Number of cards allowed to pick
     
     def execute(self) -> 'BaseResult':
         from engine.game_state import game_state

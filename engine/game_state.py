@@ -58,6 +58,13 @@ class GameState:
         self.neow_blessing_active = False
         self.neow_blessing_combat_count = 0
 
+        # Engagement meta progression
+        self.challenge_tokens: int = 0
+        self.last_turn_summary: str = ""
+        self.daily_mode: bool = False
+        self.daily_seed_label: str = ""
+        self.current_replay_code: str = ""
+
         # Key tracking for treasure events
         self.sapphire_key_picked = False
 
@@ -143,7 +150,7 @@ class GameState:
         """
         total = 0
         for act in range(1, self.current_act):
-            total += self._get_max_floor_in_act(act)
+            total += self._get_floors_in_act(act)
         total += self.floor_in_act
         return total
     
@@ -165,16 +172,19 @@ class GameState:
     def current_floor(self, value: int):
         """Setter for backward compatibility - derives act and floor_in_act from total."""
         # Calculate which act this floor belongs to
-        total = value
+        total = max(0, value)
         self.current_act = 1
         
         # Subtract each act's floors until we find the right one
-        while total >= self._get_max_floor_in_act(self.current_act):
-            total -= self._get_max_floor_in_act(self.current_act)
+        while (
+            self.current_act < MAX_ACTS
+            and total >= self._get_floors_in_act(self.current_act)
+        ):
+            total -= self._get_floors_in_act(self.current_act)
             self.current_act += 1
         
         # Remaining floors is floor_in_act
-        self.floor_in_act = total
+        self.floor_in_act = min(total, self._get_max_floor_in_act(self.current_act))
     
     @property
     def has_all_keys(self) -> bool:
@@ -193,6 +203,21 @@ class GameState:
         Returns True if act completed (reached floor 17, boss treasure).
         """
         self.floor_in_act += 1
+        
+        # Roguelike Chaos Expansion: Floor Transition Hooks
+        if hasattr(self.player, "active_mutations"):
+            for mutation in self.player.active_mutations:
+                # Dark Energy: Lose 2 Max HP per floor
+                if mutation.id_str == "DARK_ENERGY":
+                    self.player.max_hp = max(1, self.player.max_hp - 2)
+                    self.player.hp = min(self.player.hp, self.player.max_hp)
+                    print(f"[Chaos] Dark Energy drained 2 Max HP. Current Max HP: {self.player.max_hp}")
+                
+                # Blood Sacrifice: Take 3 damage per floor transition (simulating combat bleed)
+                if mutation.id_str == "BLOOD_SACRIFICE":
+                    from actions.combat import LoseHPAction
+                    LoseHPAction(target=self.player, amount=3, source="blood_sacrifice").execute()
+                    print(f"[Chaos] Blood Sacrifice drained 3 HP.")
     
     def advance_act(self) -> bool:
         """
@@ -200,18 +225,16 @@ class GameState:
         Returns True if game completed (after act 4 or act 3 without keys).
         Resets act-specific counters and generates new map.
         """
-        # Check if can enter act 4
-        if self.current_act == 4: # this means act3 finish
-            if not self.has_all_keys:
-                # No keys - game complete after act 3
-                return True
-            # Has keys - continue to act 4
-        
-        if self.current_act > MAX_ACTS:
-            return True  # Game complete after act 4
-        
-        # self.current_act += 1
-        # self.floor_in_act = 0
+        # Act 3 without all keys ends the run.
+        if self.current_act == 3 and not self.has_all_keys:
+            return True
+
+        # Act 4 completion ends the run.
+        if self.current_act >= MAX_ACTS:
+            return True
+
+        self.current_act += 1
+        self.floor_in_act = 0
         
         # Reset act-specific counters
         self.normal_encounters_fought = 0
@@ -256,10 +279,6 @@ class GameState:
 
             # Check if action returned something to process
             if result is not None:
-                # Handle legacy returns (Action, List[Action], str) directly
-                # for backward compatibility with actions that haven't been updated
-                from actions.base import Action
-
                 assert isinstance(result, BaseResult), f"Expected BaseResult, got {type(result)}"
                 
                 # BaseResult types - handle appropriately

@@ -10,7 +10,7 @@ In Act 4:
 - Final victory (Corrupt Heart defeated)
 """
 from tui.print_utils import tui_print
-from utils.result_types import BaseResult, GameStateResult, NoneResult
+from utils.result_types import BaseResult, NoneResult
 from localization import t
 from rooms.base import Room
 from utils.types import RoomType
@@ -32,17 +32,17 @@ class VictoryRoom(Room):
     def enter(self) -> BaseResult:
         from engine.game_state import game_state
 
-        if game_state.current_act == 5: # ? not 4. Because: ...
-            self._handle_act4_victory()
-            return GameStateResult(state="GAME_WIN")
-
         if game_state.current_act == 4:
+            self._handle_act4_victory()
+            return NoneResult()
+
+        if game_state.current_act == 3:
             if game_state.has_all_keys:
                 self._handle_act4_transition()
                 return NoneResult()
             else:
                 self._handle_act3_victory()
-                return GameStateResult(state="GAME_WIN")
+                return NoneResult()
 
         return NoneResult()
 

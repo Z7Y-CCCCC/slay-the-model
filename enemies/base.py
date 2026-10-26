@@ -1,6 +1,6 @@
 """Base enemy class for all monsters in combat."""
 
-from typing import Tuple, Dict, List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING, Union
 import random
 
 from entities.creature import Creature
@@ -28,7 +28,7 @@ class Enemy(Creature):
     
     def __init__(
         self,
-        hp_range: Tuple[int, int] = (40, 50),
+        hp_range: Union[Tuple[int, int], int] = (40, 50),
         name: str = None,
         max_hp: int = None,
         damage: int = None,
@@ -48,7 +48,16 @@ class Enemy(Creature):
         if max_hp is not None:
             actual_max_hp = max_hp
         else:
-            min_hp, max_hp_val = hp_range
+            if isinstance(hp_range, int):
+                min_hp = max_hp_val = hp_range
+            elif isinstance(hp_range, tuple) and len(hp_range) == 2:
+                min_hp, max_hp_val = hp_range
+            else:
+                raise ValueError(f"Invalid hp_range: {hp_range!r}")
+
+            if min_hp > max_hp_val:
+                min_hp, max_hp_val = max_hp_val, min_hp
+
             actual_max_hp = random.randint(min_hp, max_hp_val)
         super().__init__(max_hp=actual_max_hp)
         
@@ -111,12 +120,14 @@ class Enemy(Creature):
         """
         if not self.current_intention:
             return []
+
+        if isinstance(self.current_intention, str):
+            self.current_intention = self.intentions.get(self.current_intention)
+            if self.current_intention is None:
+                return []
         
         # Record in history
-        if self.current_intention.name not in self.history_intentions:
-            self.history_intentions.append(self.current_intention.name)
-        else:
-            self.history_intentions.append(self.current_intention.name)
+        self.history_intentions.append(self.current_intention.name)
         
         # Execute the intention
         actions = self.current_intention.execute()
@@ -129,7 +140,8 @@ class Enemy(Creature):
             floor: Current floor number
         """
         # Set initial intention when combat starts
-        self.current_intention = self.determine_next_intention(floor)
+        next_intention = self.determine_next_intention(floor)
+        self.current_intention = self._resolve_next_intention(next_intention)
     
     def on_player_turn_start(self) -> None:
         """Called at the start of player's turn.
@@ -138,7 +150,29 @@ class Enemy(Creature):
         """
         from engine.game_state import game_state
         current_floor = game_state.current_floor if game_state else 1
-        self.current_intention = self.determine_next_intention(current_floor)
+        next_intention = self.determine_next_intention(current_floor)
+        self.current_intention = self._resolve_next_intention(next_intention)
+
+    def _resolve_next_intention(self, intention):
+        """Normalize determine_next_intention return value.
+
+        Supported return values:
+        - Intention object: returned directly
+        - string: treated as intention name key
+        - None: keep value previously set by subclass
+        """
+        if intention is None:
+            return self.current_intention
+        if isinstance(intention, str):
+            resolved = self.intentions.get(intention)
+            if resolved is not None:
+                return resolved
+            lowered = intention.lower()
+            for key, value in self.intentions.items():
+                if key.lower() == lowered:
+                    return value
+            return None
+        return intention
     
     def on_damage_taken(self, damage: int, source=None, card=None, damage_type=None) -> List['Action']:
         """Called when enemy takes damage.

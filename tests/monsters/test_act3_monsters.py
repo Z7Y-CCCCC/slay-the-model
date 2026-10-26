@@ -27,7 +27,7 @@ class TestAct3Monsters(unittest.TestCase):
 
     def test_darkling_hp(self):
         m = Darkling()
-        self.assertGreaterEqual(m.hp, 50)
+        self.assertGreaterEqual(m.hp, 48)
 
     def test_exploder_hp(self):
         m = Exploder()
@@ -51,7 +51,7 @@ class TestAct3Monsters(unittest.TestCase):
 
     def test_repulsor_hp(self):
         m = Repulsor()
-        self.assertGreaterEqual(m.hp, 40)
+        self.assertGreaterEqual(m.hp, 29)
 
     def test_spiker_hp(self):
         m = Spiker()

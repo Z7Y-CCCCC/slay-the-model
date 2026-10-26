@@ -5,6 +5,7 @@ import random
 from tui.print_utils import tui_print
 from actions.display import SelectAction, DisplayTextAction
 from actions.misc import OpenChestAction
+from engine.mutations import ApplyMutationAction
 from utils.result_types import GameStateResult, NoneResult, MultipleActionsResult, SingleActionResult
 from engine.game_state import game_state
 from localization import LocalStr, t
@@ -37,7 +38,14 @@ class TreasureRoom(Room):
             self.chest_type = "boss"
         else:
             roll = random.random()
-            self.chest_type = "small" if roll < 0.50 else "medium" if roll < 0.83 else "large"
+            if roll < 0.10: # 10% for cursed chest
+                self.chest_type = "cursed"
+            elif roll < 0.55: # adjusted for small
+                self.chest_type = "small"
+            elif roll < 0.88: # adjusted for medium
+                self.chest_type = "medium"
+            else:
+                self.chest_type = "large"
         return self.chest_type
 
     def _get_small_chest_contents(self):
@@ -88,6 +96,26 @@ class TreasureRoom(Room):
             return []
 
         actions = []
+        
+        # Chaos Expansion: Handle Cursed Chest contents
+        if self.chest_type == "cursed":
+            from engine.mutations import get_cursed_relic_options
+            options = get_cursed_relic_options(3)
+            
+            # Use SelectAction to let player choose a cursed relic
+            select_options = []
+            for relic in options:
+                select_options.append(Option(
+                    name=f"😈 {relic.name}: {relic.description}",
+                    actions=[ApplyMutationAction(relic)]
+                ))
+            
+            actions.append(SelectAction(
+                title=t("rooms.treasure.cursed_choice", default="CHOOSE A CURSED RELIC"),
+                options=select_options
+            ))
+            return actions
+
         for relic in list(game_state.player.relics):
             hook = getattr(relic, "on_chest_open", None)
             if not hook:

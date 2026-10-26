@@ -60,20 +60,10 @@ class AIContextBuilder:
     
     @staticmethod
     def _build_player_status(gs: 'GameState') -> str:
-        """Build player status section."""
+        """Shorter player status for AI."""
         player = gs.player
-        lines = [
-            f"# {t('ai_context.player_status')}",
-            f"- {t('ai_context.hp')}: {player.hp}/{player.max_hp} | {t('ai_context.energy')}: {player.energy}/{player.max_energy} | {t('ai_context.gold')}: {player.gold}",
-            f"- {t('ai_context.floor')}: {gs.current_floor + 1} | {t('ai_context.block')}: {player.block}",
-            f"- {t('ai_context.deck')}: {len(player.deck)} {t('ai_context.cards_total')}",
-        ]
-        
-        # Max energy (if different from base)
-        if player.max_energy != 3:
-            lines.append(f"- {t('ai_context.max_energy')}: {player.max_energy}")
-        
-        return "\n".join(lines)
+        # Extreme shorthand to save bytes
+        return f"# [STAT] {player.hp}/{player.max_hp}HP|{player.energy}/{player.max_energy}E|{player.gold}G|F:{gs.current_floor + 1}|B:{player.block}"
     
     @staticmethod
     def _build_relics_info(gs: 'GameState') -> str:
@@ -83,27 +73,37 @@ class AIContextBuilder:
         
         for i, relic in enumerate(player.relics, 1):
             name = relic.local("name").resolve()
-            desc = relic.local("description").resolve()
-            # Clean up description formatting
-            desc = desc.replace("{amount}", str(getattr(relic, 'amount', '')))
-            lines.append(f"{i}. **{name}**: {desc}")
+            if i <= 8: # Only show descriptions for first 8 relics
+                desc = relic.local("description").resolve()
+                desc = desc.replace("{amount}", str(getattr(relic, 'amount', '')))
+                lines.append(f"{i}. **{name}**: {desc}")
+            else:
+                lines.append(f"{i}. **{name}**")
+        
+        if len(player.relics) > 8:
+            lines.append(f"*(Remaining {len(player.relics) - 8} relics omitted)*")
         
         return "\n".join(lines)
     
     @staticmethod
     def _build_player_powers(gs: 'GameState') -> str:
-        """Build player powers section with full descriptions."""
+        """Build player powers with intelligent filtering."""
         player = gs.player
-        lines = [f"## {t('ai_context.powers_on_you')}"]
+        lines = [f"## [POWERS]"]
+        
+        # Known common powers skip description for speed/tokens
+        COMMON_POWERS = ["力量", "敏捷", "格挡", "易伤", "虚弱", "脆弱", "人工制品", "中毒", "荆棘", "金属化", "壁垒", "多重打击"]
         
         for i, power in enumerate(player.powers, 1):
             name = power.local("name").resolve()
-            desc = power.local("description").resolve()
-            # Format amount
-            amt_str = f" x{power.amount}" if power.amount > 0 else ""
-            # Clean up description
-            desc = desc.replace("{amount}", str(power.amount))
-            lines.append(f"{i}. **{name}{amt_str}**: {desc}")
+            amt_str = f"x{power.amount}" if power.amount > 0 else ""
+            
+            # Skip description if common or many powers
+            if name in COMMON_POWERS or i > 3:
+                lines.append(f"{i}. {name}{amt_str}")
+            else:
+                desc = power.local("description").resolve().replace("{amount}", str(power.amount))
+                lines.append(f"{i}. {name}{amt_str}: {desc}")
         
         return "\n".join(lines)
     
@@ -136,26 +136,24 @@ class AIContextBuilder:
                 else:
                     name = getattr(enemy, 'name', str(enemy.__class__.__name__))
                 
-                # HP and Block
-                hp_str = f"{t('ai_context.hp')}: {enemy.hp}/{enemy.max_hp}"
-                block_str = f"{t('ai_context.block')}: {enemy.block}" if enemy.block > 0 else f"{t('ai_context.block')}: 0"
-                
-                enemy_lines.append(f"{i}. **{name}** - {hp_str} | {block_str}")
+                enemy_lines.append(f"{i}. **{name}** {enemy.hp}/{enemy.max_hp}HP|B:{enemy.block}")
                 
                 # Intent
                 if hasattr(enemy, 'current_intention') and enemy.current_intention:
-                    intent = enemy.current_intention
-                    intent_str = AIContextBuilder._format_intent(intent)
-                    enemy_lines.append(f"   - {t('ai_context.intent')}: {intent_str}")
+                    intent_str = AIContextBuilder._format_intent(enemy.current_intention)
+                    enemy_lines.append(f"   - [INT]: {intent_str}")
                 
-                # Enemy powers with descriptions
+                # Enemy powers (filtered)
+                COMMON = ["力量", "敏捷", "格挡", "易伤", "虚弱", "脆弱", "人工制品", "中毒", "荆棘", "仪式", "愤怒"]
                 if enemy.powers:
                     for power in enemy.powers:
                         pname = power.local("name").resolve()
-                        pdesc = power.local("description").resolve()
-                        pdesc = pdesc.replace("{amount}", str(power.amount))
-                        pamt = f" x{power.amount}" if power.amount > 0 else ""
-                        enemy_lines.append(f"   - {t('ai_context.power')}: **{pname}{pamt}**: {pdesc}")
+                        pamt = f"x{power.amount}" if power.amount > 0 else ""
+                        if pname in COMMON:
+                            enemy_lines.append(f"   - [P]: {pname}{pamt}")
+                        else:
+                            pdesc = power.local("description").resolve().replace("{amount}", str(power.amount))
+                            enemy_lines.append(f"   - [P]: {pname}{pamt}: {pdesc}")
         
         sections.append("\n".join(enemy_lines))
         
@@ -170,17 +168,33 @@ class AIContextBuilder:
         
         sections.append("\n".join(hand_lines))
         
-        # Draw pile (names only, it's shuffled)
-        draw_names = [AIContextBuilder._get_card_name(c) for c in draw_pile]
-        draw_line = f"{t('combat.draw_pile')} ({len(draw_pile)}): {', '.join(draw_names) if draw_names else t('ui.empty')}"
-        
-        # Discard pile
-        discard_names = [AIContextBuilder._get_card_name(c) for c in discard]
-        discard_line = f"{t('combat.discard_pile')} ({len(discard)}): {', '.join(discard_names) if discard_names else t('ui.empty')}"
-        
-        # Exhaust pile
-        exhaust_names = [AIContextBuilder._get_card_name(c) for c in exhaust]
-        exhaust_line = f"{t('combat.exhaust_pile', default='Exhaust Pile')} ({len(exhaust)}): {', '.join(exhaust_names) if exhaust_names else t('ui.empty')}"
+        # Smart grouping for token saving (Senior Designer Optimization)
+        def _truncate_pile(pile, limit=8):
+            if not pile:
+                return t('ui.empty')
+            
+            # Count identical cards
+            counts = {}
+            for c in pile:
+                name = AIContextBuilder._get_card_name(c)
+                counts[name] = counts.get(name, 0) + 1
+            
+            # Format as "Name xCount"
+            formatted = []
+            for name, count in counts.items():
+                if count > 1:
+                    formatted.append(f"{name}x{count}")
+                else:
+                    formatted.append(name)
+            
+            # Limit the number of unique types shown to avoid prompt explosion
+            if len(formatted) <= limit:
+                return ", ".join(formatted)
+            return ", ".join(formatted[:limit]) + f" ... (+{len(formatted) - limit} {t('ai_context.cards_total')})"
+
+        draw_line = f"{t('combat.draw_pile')} ({len(draw_pile)}): {_truncate_pile(draw_pile)}"
+        discard_line = f"{t('combat.discard_pile')} ({len(discard)}): {_truncate_pile(discard)}"
+        exhaust_line = f"{t('combat.exhaust_pile', default='Exhaust Pile')} ({len(exhaust)}): {_truncate_pile(exhaust)}"
         
         sections.append(f"## {t('ai_context.deck_status')}\n" + "\n".join([draw_line, discard_line, exhaust_line]))
         
@@ -194,13 +208,13 @@ class AIContextBuilder:
             return ""
         
         room_type = type(room).__name__
-        lines = [f"# {t('ai_context.current_room')}: {room_type}"]
+        lines = [f"# [ROOM]: {room_type}"]
         
         # Add room-specific info based on type
         if room_type == "ShopRoom":
             lines.append(AIContextBuilder._build_shop_info(room))
         elif room_type == "RestRoom":
-            lines.append(t('ai_context.rest_options'))
+            lines.append("[REST]: Heal 30% or Smith Upgrade")
         
         return "\n".join(lines)
     
@@ -243,7 +257,7 @@ class AIContextBuilder:
     
     @staticmethod
     def _format_card_info(card) -> str:
-        """Format a card with full information."""
+        """Extreme card info for AI."""
         # Name
         if hasattr(card, 'display_name'):
             name = card.display_name.resolve()
@@ -252,50 +266,36 @@ class AIContextBuilder:
         else:
             name = card.__class__.__name__
         
-        # Cost
         cost = card.cost if hasattr(card, 'cost') and card.cost is not None else 0
-        if cost < 0:
-            cost_str = "X"
-        elif cost == -1:
-            cost_str = "X"
-        else:
-            cost_str = str(cost)
+        cost_str = str(cost) if cost >= 0 else "X"
         
-        # Type - localize card type
-        if hasattr(card, 'card_type'):
-            ctype_val = card.card_type.value if hasattr(card.card_type, 'value') else str(card.card_type)
-            ctype = t(f'card_type.{ctype_val.lower()}', default=ctype_val)
-        else:
-            ctype = t('ui.unknown', default='Unknown')
-        
-        # Stats (damage, block)
+        # Stats
         stats = []
         if hasattr(card, 'damage') and card.damage and card.damage > 0:
-            stats.append(f"{t('ai_context.dmg')}:{card.damage}")
+            stats.append(f"D:{card.damage}")
         if hasattr(card, 'block') and card.block and card.block > 0:
-            stats.append(f"{t('ai_context.blk')}:{card.block}")
-        stats_str = f" ({', '.join(stats)})" if stats else ""
+            stats.append(f"B:{card.block}")
+        stats_str = f"({','.join(stats)})" if stats else ""
         
-        # Description
-        if hasattr(card, 'local'):
+        # Skip descriptions for starters/obvious cards
+        STARTERS = ["打击", "防御", "打击+", "防御+", "重击", "重击+"]
+        desc = ""
+        if name not in STARTERS and hasattr(card, 'local'):
             desc = card.local("description").resolve()
-            # Format variables in description
             if hasattr(card, 'damage') and card.damage:
                 desc = desc.replace("{damage}", str(card.damage))
             if hasattr(card, 'block') and card.block:
                 desc = desc.replace("{block}", str(card.block))
-            # Handle magic.XXX placeholders - need to access _magic dict
             if hasattr(card, '_magic') and card._magic:
-                for magic_key, magic_val in card._magic.items():
-                    desc = desc.replace(f"{{magic.{magic_key}}}", str(magic_val))
-        else:
-            desc = ""
-        # Build formatted string
-        result = f"**[{cost_str}] {name} [{ctype}]{stats_str}**"
-        if desc:
-            result += f"\n   {desc}"
+                for mk, mv in card._magic.items():
+                    desc = desc.replace(f"{{magic.{mk}}}", str(mv))
         
-        return result
+        res = f"**[{cost_str}] {name} {stats_str}**"
+        if desc:
+            # Inline description for more compactness
+            res += f" - {desc}"
+        
+        return res
     
     @staticmethod
     def _get_card_name(card) -> str:

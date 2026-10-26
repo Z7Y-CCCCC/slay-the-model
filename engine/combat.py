@@ -4,6 +4,7 @@ Can be triggered by CombatRoom or Events.
 Uses global action queue for action management.
 """
 from collections import Counter
+import hashlib
 from typing import List
 from tui.print_utils import tui_print
 from actions.base import Action
@@ -26,7 +27,7 @@ class Combat(Localizable):
     Uses global action queue from game_state for action management.
     """
 
-    def __init__(self, enemies: List[Enemy], combat_type: CombatType = CombatType.NORMAL):
+    def __init__(self, enemies: List[Enemy], combat_type: CombatType = CombatType.NORMAL, mutation=None):
         """
         Initialize combat.
 
@@ -36,6 +37,7 @@ class Combat(Localizable):
         """
         self.enemies = enemies
         self.combat_type = combat_type
+        self.elite_mutation = mutation
         
         # Combat state
         from .combat_state import CombatState
@@ -44,6 +46,19 @@ class Combat(Localizable):
         # Combat control flags
         self.combat_ended = False
         self.player_turn_ended = False
+        self.localization_prefix = "combat"
+
+        # UX telemetry
+        self.turn_summary_history = []
+        self._turn_context = {}
+        self._incoming_intent_estimate = 0
+        self._coach_last_signature = None
+
+        # Optional temporary combat challenge (deterministic, no RNG side effects)
+        self.challenge = None
+        self._challenge_failed = False
+        self._challenge_damage_taken = 0
+        self._challenge_peak_turn_damage = 0
 
     def add_enemy(self, enemy: Enemy):
         """Add an enemy to combat."""
@@ -55,8 +70,168 @@ class Combat(Localizable):
         if enemy in self.enemies:
             self.enemies.remove(enemy)
         
-        # Localization
-        self.localization_prefix = "combat"
+    def _get_intention_hits(self, intention) -> int:
+        if intention is None:
+            return 1
+        for attr in ("hits", "base_hits", "base_times", "_hits"):
+            value = getattr(intention, attr, None)
+            if isinstance(value, int) and value > 0:
+                return value
+        return 1
+
+    def _estimate_intention_damage(self, enemy: Enemy) -> int:
+        intention = getattr(enemy, "current_intention", None)
+        if intention is None:
+            return 0
+        base_damage = getattr(intention, "base_damage", 0)
+        if not isinstance(base_damage, int) or base_damage <= 0:
+            return 0
+        if hasattr(enemy, "calculate_damage"):
+            try:
+                damage_per_hit = int(enemy.calculate_damage(base_damage))
+            except Exception:
+                damage_per_hit = base_damage
+        else:
+            damage_per_hit = base_damage
+        return max(0, damage_per_hit) * self._get_intention_hits(intention)
+
+    def _estimate_incoming_damage(self) -> int:
+        total = 0
+        for enemy in self.enemies:
+            is_dead = False
+            if hasattr(enemy, "is_dead"):
+                try:
+                    is_dead = bool(enemy.is_dead())
+                except Exception:
+                    is_dead = False
+            if is_dead:
+                continue
+            total += self._estimate_intention_damage(enemy)
+        return total
+
+    def _total_enemy_hp(self) -> int:
+        total = 0
+        for enemy in self.enemies:
+            is_dead = False
+            if hasattr(enemy, "is_dead"):
+                try:
+                    is_dead = bool(enemy.is_dead())
+                except Exception:
+                    is_dead = False
+            if is_dead:
+                continue
+            total += max(0, int(getattr(enemy, "hp", 0)))
+        return total
+
+    def _assign_combat_challenge(self):
+        from engine.game_state import game_state
+
+        # Allow disabling via config if needed.
+        if not game_state.config.get("gameplay.enable_combat_challenges", True):
+            self.challenge = None
+            return
+
+        challenge_pool = [
+            {
+                "id": "flawless",
+                "title": "Flawless",
+                "description": "Win the combat without losing HP.",
+            },
+            {
+                "id": "speed",
+                "title": "Speed Kill",
+                "description": "Win within 4 turns.",
+            },
+            {
+                "id": "burst",
+                "title": "Burst",
+                "description": "Deal at least 25 damage in a single turn.",
+            },
+        ]
+
+        # Deterministic hash avoids disturbing combat/map RNG order.
+        combat_key = (
+            f"{game_state.config.seed}:"
+            f"{game_state.current_act}:"
+            f"{game_state.floor_in_act}:"
+            f"{self.combat_type.value}:"
+            f"{len(self.enemies)}"
+        )
+        digest = int(hashlib.sha256(combat_key.encode("utf-8")).hexdigest()[:8], 16)
+
+        spawn_rate = {
+            CombatType.NORMAL: 35,
+            CombatType.ELITE: 55,
+            CombatType.BOSS: 65,
+        }.get(self.combat_type, 35)
+        if digest % 100 >= spawn_rate:
+            self.challenge = None
+            return
+
+        self.challenge = challenge_pool[(digest // 100) % len(challenge_pool)]
+        self._challenge_failed = False
+        self._challenge_damage_taken = 0
+        self._challenge_peak_turn_damage = 0
+
+    def _challenge_result_on_victory(self) -> bool:
+        if not self.challenge:
+            return False
+
+        challenge_id = self.challenge["id"]
+        if challenge_id == "flawless":
+            return self._challenge_damage_taken <= 0
+        if challenge_id == "speed":
+            return self.combat_state.combat_turn <= 4
+        if challenge_id == "burst":
+            return self._challenge_peak_turn_damage >= 25
+        return False
+
+    def _build_coach_suggestions(self, options: List[Option]) -> List[str]:
+        from engine.game_state import game_state
+
+        player = game_state.player
+        hand = list(player.card_manager.get_pile("hand"))
+        suggestions = []
+
+        incoming = self._estimate_incoming_damage()
+        if incoming > player.block:
+            for card in hand:
+                card_block = getattr(card, "block", 0) or 0
+                if card_block > 0:
+                    suggestions.append(
+                        f"Incoming {incoming} > block {player.block}: consider a block card first."
+                    )
+                    break
+
+        alive_enemies = []
+        for enemy in self.enemies:
+            if hasattr(enemy, "is_dead"):
+                try:
+                    if enemy.is_dead():
+                        continue
+                except Exception:
+                    pass
+            alive_enemies.append(enemy)
+        if alive_enemies:
+            lowest_enemy_hp = min(enemy.hp for enemy in alive_enemies)
+            for card in hand:
+                card_damage = getattr(card, "damage", 0) or 0
+                if card_damage >= lowest_enemy_hp and card_damage > 0:
+                    suggestions.append(
+                        f"You can likely secure a kill this turn (enemy HP {lowest_enemy_hp})."
+                    )
+                    break
+
+        if player.hp <= max(10, int(player.max_hp * 0.3)) and incoming > 0:
+            suggestions.append("Low HP state: prioritize survivability over greed.")
+
+        if not suggestions:
+            if len(options) <= 1:
+                suggestions.append("No strong playable action; ending turn is acceptable.")
+            else:
+                suggestions.append("Use low-cost cards first to maximize turn flexibility.")
+
+        return suggestions[:3]
 
     def start(self) -> GameStateResult:
         """
@@ -130,6 +305,9 @@ class Combat(Localizable):
             if isinstance(result, GameStateResult):
                 return result
 
+        self._turn_context["enemy_hp_after_player"] = self._total_enemy_hp()
+        self._turn_context["energy_left"] = game_state.player.energy
+
         # End player phase: trigger end-of-turn effects, discard hand
         return self._end_player_phase()
     
@@ -158,7 +336,7 @@ class Combat(Localizable):
             status_parts.append(f"{t('ui.enemy_block', default='Block')}: {enemy.block}")
 
         actions.append(DisplayTextAction(text_key="combat.display"))
-        
+
         # 2. Build SelectAction for cards in hand
         hand = game_state.player.card_manager.get_pile("hand")
         options: List[Option] = []
@@ -187,6 +365,22 @@ class Combat(Localizable):
             name=LocalStr("combat.end_turn"),
             actions=[EndTurnAction()]
         ))
+
+        # Human coach: provide lightweight recommendations in combat without API calls.
+        if game_state.config.mode == "human" and game_state.config.get("human.ai_coach", True):
+            coach_signature = (
+                self.combat_state.combat_turn,
+                game_state.player.energy,
+                len(hand),
+                self._estimate_incoming_damage(),
+                self._total_enemy_hp(),
+            )
+            if coach_signature != self._coach_last_signature:
+                coach_lines = self._build_coach_suggestions(options=options)
+                if coach_lines:
+                    coach_text = "[Coach]\n" + "\n".join(f"- {line}" for line in coach_lines)
+                    actions.append(DisplayTextAction(default=coach_text))
+                self._coach_last_signature = coach_signature
         
         actions.append(SelectAction(
             options=options,
@@ -197,7 +391,6 @@ class Combat(Localizable):
 
     def _print_combat_state(self):
         """Print detailed combat state for player feedback"""
-        import random
         from engine.game_state import game_state
         from localization import t
         from tui import get_app, is_tui_mode
@@ -223,16 +416,31 @@ class Combat(Localizable):
         tui_print(f"{t('ui.player_hp', default='HP')}: {player.hp}/{player.max_hp}")
         tui_print(f"{t('ui.player_block', default='Block')}: {player.block}")
         tui_print(f"{t('ui.player_energy', default='Energy')}: {player.energy}/{player.max_energy}")
+
+        # Incoming damage warning to improve readability of intent pressure.
+        incoming_damage = self._estimate_incoming_damage()
+        self._incoming_intent_estimate = incoming_damage
+        if incoming_damage > 0:
+            safety = player.hp + player.block
+            if incoming_damage >= safety:
+                tui_print(
+                    f"[Risk] Incoming damage ≈ {incoming_damage} exceeds HP+Block ({safety})."
+                )
+            elif incoming_damage > player.block:
+                tui_print(
+                    f"[Risk] Incoming damage ≈ {incoming_damage}; current block {player.block}."
+                )
         
         # Print hand
         tui_print(f"\n{t('ui.hand', default='Hand')} ({len(hand)}):")
         for i, card in enumerate(hand):
             tui_print(f"  [{i+1}] {card.info()}")
 
-        draw_display = list(reversed(draw_pile))
-        if not has_frozen_eye:
-            random.shuffle(draw_display)
-        draw_text = ", ".join(card.display_name.resolve() for card in draw_display)
+        if has_frozen_eye:
+            draw_display = list(reversed(draw_pile))
+            draw_text = ", ".join(card.display_name.resolve() for card in draw_display)
+        else:
+            draw_text = t("ui.draw_pile_hidden", default="(order hidden)")
         discard_text = ", ".join(card.display_name.resolve() for card in discard_pile)
         tui_print(f"\n{t('ui.draw_pile', default='Draw Pile')} ({len(draw_pile)}): {draw_text}")
         tui_print(
@@ -356,6 +564,8 @@ class Combat(Localizable):
         # _debug_print_combat_state("ENEMY_PHASE_START", self.enemies)
 
         self.combat_state.current_phase = "enemy_action"
+        player_hp_before_enemy = game_state.player.hp
+        incoming_before_enemy = self._estimate_incoming_damage()
 
         # For each alive enemy, execute actions
         for enemy in self.enemies:
@@ -387,7 +597,12 @@ class Combat(Localizable):
         # Process enemy turn-end effects (tick down power durations)
         self._end_enemy_phase()
 
-        return game_state.execute_all_actions()
+        result = game_state.execute_all_actions()
+        self._emit_turn_summary(
+            player_hp_before_enemy=player_hp_before_enemy,
+            incoming_before_enemy=incoming_before_enemy,
+        )
+        return result
     
     def _end_enemy_phase(self):
         """Process end of enemy turn - tick down enemy power durations."""
@@ -425,6 +640,19 @@ class Combat(Localizable):
         
         # Check if all enemies are dead
         if not self.enemies or all(e.is_dead() for e in self.enemies):
+            if self.challenge:
+                from engine.game_state import game_state
+                success = self._challenge_result_on_victory()
+                if success:
+                    game_state.challenge_tokens += 1
+                    tui_print(
+                        f"[Challenge Complete] {self.challenge['title']} (+1 token)"
+                    )
+                else:
+                    tui_print(
+                        f"[Challenge Failed] {self.challenge['title']}"
+                    )
+
             # Trigger on_combat_end for relics
             for relic in game_state.player.relics:
                 game_state.action_queue.add_actions(relic.on_combat_end(
@@ -457,6 +685,7 @@ class Combat(Localizable):
         
         # Set current combat reference
         game_state.current_combat = self
+        self._assign_combat_challenge()
         
         # Reset and setup combat state
         self.combat_state.reset_combat_info()
@@ -472,6 +701,11 @@ class Combat(Localizable):
         
         # Clear player powers at start of each combat (powers don't persist between combats)
         game_state.player.powers = []
+
+        # Elite affixes are applied after the combat reset so temporary effects
+        # (such as Blinding's Weak) cannot be wiped out by setup.
+        if self.elite_mutation and hasattr(self.elite_mutation, "apply_to_player"):
+            self.elite_mutation.apply_to_player(game_state.player)
         
         # Trigger combat start effects (relics)
         for relic in game_state.player.relics:
@@ -483,6 +717,23 @@ class Combat(Localizable):
         # Trigger combat start effects for enemies
         for enemy in self.enemies:
             enemy.on_combat_start(floor=game_state.current_floor)
+
+        if self.challenge:
+            tui_print(
+                f"[Challenge] {self.challenge['title']}: {self.challenge['description']}"
+            )
+        
+        # Roguelike Chaos Expansion: Apply active mutations
+        if hasattr(game_state.player, "active_mutations"):
+            for mutation in game_state.player.active_mutations:
+                # 1) Re-apply player-side effects if they depend on flags
+                if mutation.id_str == "BLOOD_SACRIFICE":
+                    # Blood Sacrifice (Cursed Relic): 2 Strength at start
+                    from powers.definitions.strength import StrengthPower
+                    game_state.player.add_power(StrengthPower(amount=2))
+                
+                # 2) Handle enemy-side mutation effects if this is a mutated room
+                # (Already handled in CombatRoom.init for elite rooms, but can be generic here)
         
         # God mode: set all enemies to 1 HP if enabled
         god_mode_enabled = game_state.config.get("debug.god_mode", False)
@@ -572,12 +823,28 @@ class Combat(Localizable):
             from actions.card import DrawCardsAction
             game_state.action_queue.add_action(DrawCardsAction(count=draw_count))
 
+        # Blood Sacrifice is intentionally paid every turn, including turn one.
+        # Queue it before the draw so lethal damage cleanly ends the phase.
+        if getattr(game_state.player, "flags", {}).get("blood_sacrifice", False):
+            from actions.combat import LoseHPAction
+            game_state.action_queue.add_action(
+                LoseHPAction(target=game_state.player, amount=3, source="blood_sacrifice")
+            )
+
         # Reset energy
         game_state.player.energy = game_state.player.max_energy
 
         # Increment turn counter
         self.combat_state.combat_turn += 1
         self.combat_state.current_phase = "player_action"
+        self._turn_context = {
+            "turn": self.combat_state.combat_turn,
+            "player_hp_start": game_state.player.hp,
+            "enemy_hp_start": self._total_enemy_hp(),
+            "energy_start": game_state.player.energy,
+            "energy_left": game_state.player.energy,
+            "enemy_hp_after_player": self._total_enemy_hp(),
+        }
         
         # relics - powers
         for relic in game_state.player.relics:
@@ -587,3 +854,32 @@ class Combat(Localizable):
         # enemies
         for enemy in self.enemies:
             enemy.on_player_turn_start()
+
+    def _emit_turn_summary(self, player_hp_before_enemy: int, incoming_before_enemy: int):
+        from engine.game_state import game_state
+
+        if not self._turn_context:
+            return
+
+        enemy_hp_start = self._turn_context.get("enemy_hp_start", 0)
+        enemy_hp_after_player = self._turn_context.get("enemy_hp_after_player", enemy_hp_start)
+        energy_start = self._turn_context.get("energy_start", game_state.player.max_energy)
+        energy_left = self._turn_context.get("energy_left", game_state.player.energy)
+
+        damage_dealt = max(0, enemy_hp_start - enemy_hp_after_player)
+        damage_taken = max(0, player_hp_before_enemy - game_state.player.hp)
+        mitigated = max(0, incoming_before_enemy - damage_taken)
+        energy_spent = max(0, energy_start - energy_left)
+
+        summary = (
+            f"[Turn {self._turn_context.get('turn', self.combat_state.combat_turn)} Summary] "
+            f"Dealt {damage_dealt} | Took {damage_taken} | Mitigated {mitigated} | "
+            f"Energy spent {energy_spent}/{energy_start}"
+        )
+        self.turn_summary_history.append(summary)
+        game_state.last_turn_summary = summary
+        tui_print(summary)
+
+        if self.challenge:
+            self._challenge_damage_taken += damage_taken
+            self._challenge_peak_turn_damage = max(self._challenge_peak_turn_damage, damage_dealt)

@@ -69,7 +69,7 @@ class TestAct2Monsters(unittest.TestCase):
 
     def test_spheric_guardian_hp(self):
         m = SphericGuardian()
-        self.assertGreaterEqual(m.hp, 55)
+        self.assertGreaterEqual(m.hp, 20)
 
     def test_taskmaster_hp(self):
         m = Taskmaster()

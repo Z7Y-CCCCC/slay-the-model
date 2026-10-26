@@ -32,50 +32,127 @@ class DisplayPanel(Widget):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._last_hp = 0
+        self._last_energy = 0
     
     def update_player_info(self, player, gs):
-        """Update player info section."""
+        """Update player info section with premium icons and colors."""
         hp_bar = self._make_hp_bar(player.hp, player.max_hp)
-        energy_str = f"Energy: {player.energy}/{player.max_energy}"
-        gold_str = f"Gold: {player.gold}"
-        floor_str = f"Floor: {gs.current_floor + 1}"
+        
+        # Use icons and thematic colors with premium neon style
+        energy_ratio = player.energy
+        max_energy = player.max_energy
+        energy_blocks = "▰" * max(0, energy_ratio) + "▱" * max(0, max_energy - energy_ratio)
+        energy_str = f"[bold #00e5ff]⚡ Energy: {energy_blocks} [bold]{player.energy}[/][dim]/{player.max_energy}[/][/]"
+        gold_str = f"[bold #ffd700]🪙 Gold: {player.gold}[/]"
+        floor_str = f"[bold #c99a52]⌂ Floor: {gs.current_floor + 1}[/]"
+        deck_size = len(getattr(player, "deck", []) or [])
+        token_str = f"[bold #d8b26e]✦ {getattr(gs, 'challenge_tokens', 0)}[/]"
         
         relics_str = ""
         if player.relics:
-            relic_names = [r.local('name').resolve() for r in player.relics[:5]]
-            relics_str = f"Relics: {', '.join(relic_names)}"
-            if len(player.relics) > 5:
-                relics_str += f" (+{len(player.relics) - 5})"
+            relic_names = [f"[#d0c0ff]{r.local('name').resolve()}[/]" for r in player.relics[:6]]
+            relics_str = f"[dim]💍 Relics:[/dim] {', '.join(relic_names)}"
+            if len(player.relics) > 6:
+                relics_str += f" [dim](+{len(player.relics) - 6})[/]"
         
-        # Deck info
-        # deck_str = f"Deck: {len(player.deck)} cards"
+        # Double column layout with 5-line ASCII helmet avatar using Table grid (prevents wrapping layout shift)
+        from rich.table import Table
+        grid = Table.grid(expand=True, padding=(0, 2))
+        grid.add_column("avatar", width=16, justify="center")
+        grid.add_column("stats")
         
-        self.player_info = f"\n{hp_bar}\n{energy_str} | {gold_str} | {floor_str}\n{relics_str}"
+        avatar_text = (
+            "   [bold #ff5555]    /\\    [/]\n"
+            "   [bold #ff5555]   /  \\   [/]\n"
+            "   [bold #ff1744]  | [#ffd700]■  ■[/] |  [/]\n"
+            "   [bold #ff5555]  \\====/  [/]\n"
+            "   [bold #ff1744]   /|##|\\  [/]"
+        )
+        stats_text = (
+            f"{hp_bar}\n"
+            f"{energy_str}\n"
+            f"{gold_str}   {floor_str}   [dim]Deck {deck_size}[/]   {token_str}\n"
+            f"{relics_str}"
+        )
+        
+        grid.add_row(avatar_text, stats_text)
+        self.player_info = grid
+        
+        # Trigger flash effects if values changed
+        if player.hp != self._last_hp:
+            self._trigger_flash("hp-flash")
+            self._last_hp = player.hp
+        if player.energy != self._last_energy:
+            self._trigger_flash("energy-flash")
+            self._last_energy = player.energy
+
         self._refresh_display()
+
+    def _trigger_flash(self, class_name: str):
+        """Apply a flash CSS class and remove it after a delay."""
+        self.add_class(class_name)
+        self.set_timer(0.5, lambda: self.remove_class(class_name))
     
-    def _make_hp_bar(self, hp: int, max_hp: int, width: int = 20) -> str:
-        """Create an HP bar visualization."""
-        filled = int((hp / max_hp) * width) if max_hp > 0 else 0
-        bar = "█" * filled + "░" * (width - filled)
-        return f"HP: [{bar}] {hp}/{max_hp}"
+    def _make_hp_bar(self, hp: int, max_hp: int, width: int = 24) -> str:
+        """Create a premium, multi-color HP bar visualization."""
+        if max_hp <= 0: return "[dim]HP: ???[/]"
+        
+        ratio = hp / max_hp
+        filled = int(ratio * width)
+        
+        # Dynamic coloring and heart icon based on health percentage
+        color = "#00e676"  # Emerald Green (Healthy)
+        heart = "💖"
+        prefix = ""
+        if ratio < 0.25:
+            color = "#ff1744"  # Crimson (Danger)
+            heart = "💔"
+            prefix = "[bold blink #ff1744]⚠️ [/]"
+        elif ratio < 0.5:
+            color = "#ff9100"  # Amber (Warning)
+            heart = "🧡"
+        
+        bar_fill = "█" * filled
+        bar_empty = "░" * (width - filled)
+        
+        return f"{prefix}[bold]{heart} HP:[/] [{color}]{bar_fill}[/][#333333]{bar_empty}[/] [bold]{hp}[/][dim]/{max_hp}[/]"
     
-    def update_content(self, content: str):
+    def update_content(self, content: Any):
         """Replace main content area."""
         self.panel_content = content or ""
         self._refresh_display()
     
     def _refresh_display(self):
-        """Render combined player info + content."""
-        lines = []
+        """Render content with player info and main panel content."""
+        from rich.console import Group
+        from rich.text import Text
+        
+        elements = []
         if self.player_info:
-            lines.append(self.player_info)
-            lines.append("─" * 40)
+            if isinstance(self.player_info, str):
+                elements.append(Text.from_markup(self.player_info))
+            else:
+                elements.append(self.player_info)
+            elements.append(Text("─" * 40))
+            
         if self.panel_content:
-            lines.append(self.panel_content)
-        # Update the inner Static widget, not self
+            if isinstance(self.panel_content, list):
+                for item in self.panel_content:
+                    if isinstance(item, str):
+                        elements.append(Text.from_markup(item))
+                    else:
+                        elements.append(item)
+            else:
+                if isinstance(self.panel_content, str):
+                    elements.append(Text.from_markup(self.panel_content))
+                else:
+                    elements.append(self.panel_content)
+                
         try:
             content_widget = self.query_one("#display-content", Static)
-            content_widget.update("\n".join(lines))
+            # Use Group to combine different Rich elements safely
+            content_widget.update(Group(*elements))
         except Exception:
             pass  # Widget not yet mounted
     
@@ -138,7 +215,9 @@ class SelectionPanel(Widget):
         self._must_select = must_select
         self._selection_future = future
         self._refresh_display()
-        self.query_one("#selection-input", Input).focus()
+        selection_input = self.query_one("#selection-input", Input)
+        selection_input.placeholder = "Enter option number(s)"
+        selection_input.focus()
     
     def _refresh_display(self):
         """Render selection options."""
@@ -149,7 +228,7 @@ class SelectionPanel(Widget):
         
         for i, opt in enumerate(self._options_data):
             name = str(opt.name) if hasattr(opt, 'name') else str(opt)
-            lines.append(f"  [cyan]{i + 1}.[/cyan] {name}")
+            lines.append(f"  [bold #d8b26e]{i + 1:02d}[/] [#e9dfc7]{name}[/]")
         
         lines.append("")
         if self._must_select:
@@ -250,7 +329,7 @@ class SelectionPanel(Widget):
         
         for i, opt in enumerate(self._options_data):
             name = str(opt.name) if hasattr(opt, 'name') else str(opt)
-            lines.append(f"  [cyan]{i + 1}.[/cyan] {name}")
+            lines.append(f"  [bold #d8b26e]{i + 1:02d}[/] [#e9dfc7]{name}[/]")
         
         lines.append("")
         if self._must_select:
@@ -322,7 +401,7 @@ class SelectionPanel(Widget):
         # Options
         for i, opt in enumerate(self._options_data):
             name = str(opt.name) if hasattr(opt, 'name') else str(opt)
-            lines.append(f"  [cyan]{i + 1}.[/cyan] {name}")
+            lines.append(f"  [bold #d8b26e]{i + 1:02d}[/] [#e9dfc7]{name}[/]")
         
         lines.append("")
         
@@ -510,8 +589,33 @@ class SlayTheModelApp(App):
         message = t('ui.game_finished', default='Game Finished')
         sub_message = t('ui.press_to_exit', default='Press [q] or [Ctrl+C] to exit')
         
+        # Check if player won or lost based on hp
+        is_won = game_state.player.hp > 0
+        if is_won:
+            banner = (
+                "[bold #ffd700]\n"
+                " ██    ██ ██  ██████ ████████  ██████  ██████  ██    ██ \n"
+                " ██    ██ ██ ██         ██    ██    ██ ██   ██  ██  ██  \n"
+                " ██    ██ ██ ██         ██    ██    ██ ██████    ████   \n"
+                "  ██  ██  ██ ██         ██    ██    ██ ██   ██    ██    \n"
+                "   ████   ██  ██████    ██     ██████  ██   ██    ██    \n"
+                "[/bold #ffd700]\n"
+                "[bold #ffd700]🏆 恭喜！您成功征服了杀戮之塔！ 🏆[/bold #ffd700]\n\n"
+            )
+        else:
+            banner = (
+                "[bold #ff1744]\n"
+                "  ██████   █████  ███    ███ ███████      ██████  ██    ██ ███████ ██████  \n"
+                " ██       ██   ██ ████  ████ ██          ██    ██ ██    ██ ██      ██   ██ \n"
+                " ██   ███ ███████ ██ ████ ██ █████       ██    ██ ██    ██ █████   ██████  \n"
+                " ██    ██ ██   ██ ██  ██  ██ ██          ██    ██  ██  ██  ██      ██   ██ \n"
+                "  ██████  ██   ██ ██      ██ ███████      ██████    ████   ███████ ██   ██ \n"
+                "[/bold #ff1744]\n"
+                f"[bold #ff1744]☠ 您在塔中倒下了... 爬塔层数: {game_state.current_floor + 1} ☠[/bold #ff1744]\n\n"
+            )
+        
         # Show message in display panel
-        self.update_display_content(f"[bold green]{message}[/bold green]\n\n[yellow]{sub_message}[/yellow]")
+        self.update_display_content(f"{banner}[bold green]{message}[/bold green]\n\n[yellow]{sub_message}[/yellow]")
         
         # Log to output panel as well
         self.add_output(f"\n{message}", "state")
@@ -541,11 +645,11 @@ class SlayTheModelApp(App):
     
     def update_player_info(self, player, gs):
         """Update player info in display panel."""
-        self.get_display_panel().update_player_info(player, gs)
+        self.call_from_thread(self.get_display_panel().update_player_info, player, gs)
     
     def update_display_content(self, content: str):
         """Update display panel content."""
-        self.get_display_panel().update_content(content)
+        self.call_from_thread(self.get_display_panel().update_content, content)
     
     def show_selection(self, title: str, options: List[Any]) -> int:
         """Show selection and wait for input. Returns selected index."""

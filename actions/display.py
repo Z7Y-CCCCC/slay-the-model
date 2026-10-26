@@ -184,6 +184,31 @@ class SelectAction(Action):
             for line in lines:
                 print(line)
 
+    def _show_option_details(self, options: List[Option]):
+        """Show detailed option reference for quick in-selection help."""
+        app = _get_tui_app()
+        lines = [t("ui.option_details", default="Option details:")]
+        for idx, option in enumerate(options, start=1):
+            name = str(getattr(option, "name", option))
+            desc = str(getattr(option, "description", "") or "")
+            if desc:
+                lines.append(f"  {idx}. {name} - {desc}")
+            else:
+                lines.append(f"  {idx}. {name}")
+        lines.append(
+            t(
+                "ui.quick_controls",
+                default="Quick controls: '?'=details, 'u'=clear pending input.",
+            )
+        )
+
+        if app:
+            for line in lines:
+                app.add_output(line, "ui")
+        else:
+            for line in lines:
+                print(line)
+
     def _execute_human_tui(
         self,
         options: List[Option],
@@ -359,6 +384,18 @@ class SelectAction(Action):
                     )
                 
                 input_str = input(prompt_text).strip()
+                lowered = input_str.lower()
+                if lowered in {"?", "h", "help"}:
+                    self._show_option_details(options)
+                    continue
+                if lowered == "u":
+                    print(
+                        t(
+                            "ui.undo_pending",
+                            default="Cleared pending selection input.",
+                        )
+                    )
+                    continue
                 
                 # 解析输入
                 selected_indices = []
@@ -498,8 +535,8 @@ class SelectAction(Action):
                         content
                     )
             
-            # Use streaming method if available and stream mode is enabled
-            if is_stream_mode and hasattr(engine, 'make_decision_with_streaming'):
+            # Use streaming method if available (always for local simulation if TUI-app is present)
+            if hasattr(engine, 'make_decision_with_streaming'):
                 selected_indices, thinking_result = engine.make_decision_with_streaming(
                     title=str(self.title),
                     options=option_texts,
@@ -533,14 +570,12 @@ class SelectAction(Action):
             def streaming_callback(chunk_type: str, content: str):
                 """Callback for streaming output in no-TUI mode."""
                 if chunk_type == "thinking":
-                    # Real-time thinking output (no newline prefix, just print as-is)
                     _safe_print(content)
                 elif chunk_type == "answer":
-                    # Real-time answer output
                     _safe_print(content)
             
-            # Use streaming method if available and stream mode is enabled
-            if is_stream_mode and hasattr(engine, 'make_decision_with_streaming'):
+            # Use streaming method if available (prefer it for local simulation)
+            if hasattr(engine, 'make_decision_with_streaming'):
                 selected_indices, thinking_result = engine.make_decision_with_streaming(
                     title=str(self.title),
                     options=option_texts,
@@ -548,7 +583,6 @@ class SelectAction(Action):
                     max_select=actual_max_select,
                     streaming_callback=streaming_callback,
                 )
-                # Print newline after streaming completes
                 _safe_print("")
             elif hasattr(engine, 'make_decision_with_thinking'):
                 selected_indices, thinking_result = engine.make_decision_with_thinking(
@@ -616,7 +650,18 @@ class SelectAction(Action):
                             _safe_print(f"  {line}")
         
         if not selected_indices:
-            # AI returned no valid selection
+            # AI returned no valid selection. If selection is mandatory,
+            # fall back to deterministic first option to keep game flow running.
+            if self.must_select and options:
+                selected_indices = [0]
+            else:
+                return NoneResult()
+
+        selected_indices = [
+            idx for idx in selected_indices
+            if 0 <= idx < len(options)
+        ]
+        if not selected_indices:
             return NoneResult()
         
         # Handle stop option (index 0 when must_select=False)

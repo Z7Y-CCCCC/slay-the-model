@@ -1,10 +1,12 @@
 """
 Comprehensive test for all map generation constraints.
 """
+import pytest
+
 from map.map_manager import MapManager
 from utils.types import RoomType
 
-def test_all_constraints(seed: int) -> bool:
+def _all_constraints_ok(seed: int) -> bool:
     """Test all map generation constraints with a specific seed."""
     mm = MapManager(seed=seed, act_id=1)
     mm.generate_map()
@@ -70,6 +72,11 @@ def test_all_constraints(seed: int) -> bool:
     
     return True
 
+
+@pytest.mark.parametrize("seed", [1, 42, 100, 999, 12345, 666, 777, 8888, 1000])
+def test_all_constraints(seed: int):
+    _all_constraints_ok(seed)
+
 if __name__ == "__main__":
     seeds = [1, 42, 100, 999, 12345, 666, 777, 8888, 42, 1000]
     
@@ -79,7 +86,7 @@ if __name__ == "__main__":
     
     all_passed = True
     for seed in seeds:
-        passed = test_all_constraints(seed)
+        passed = _all_constraints_ok(seed)
         if not passed:
             all_passed = False
     

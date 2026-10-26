@@ -1,10 +1,12 @@
 """
 Test map generation with multiple seeds to verify constraint enforcement.
 """
+import pytest
+
 from map.map_manager import MapManager
 from utils.types import RoomType
 
-def test_seed(seed: int) -> bool:
+def _seed_constraints_ok(seed: int) -> bool:
     """Test map generation with a specific seed."""
     mm = MapManager(seed=seed, act_id=1)
     mm.generate_map()
@@ -25,6 +27,11 @@ def test_seed(seed: int) -> bool:
     
     return True
 
+
+@pytest.mark.parametrize("seed", [1, 42, 100, 999, 12345, 666, 777, 8888])
+def test_seed(seed: int):
+    _seed_constraints_ok(seed)
+
 if __name__ == "__main__":
     seeds = [1, 42, 100, 999, 12345, 666, 777, 8888]
     
@@ -34,7 +41,7 @@ if __name__ == "__main__":
     
     all_passed = True
     for seed in seeds:
-        passed = test_seed(seed)
+        passed = _seed_constraints_ok(seed)
         if not passed:
             all_passed = False
     

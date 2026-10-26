@@ -28,10 +28,10 @@ class TestSpireShield(unittest.TestCase):
         self.helper._reset_game_state()
     
     def test_hp_range(self):
-        """Test Spire Shield has correct HP range (42-48)"""
+        """Test Spire Shield has correct HP range."""
         shield = SpireShield()
-        self.assertGreaterEqual(shield.hp, 42)
-        self.assertLessEqual(shield.hp, 48)
+        self.assertGreaterEqual(shield.hp, 110)
+        self.assertLessEqual(shield.hp, 125)
     
     def test_is_elite(self):
         """Test Spire Shield is Elite type"""
@@ -60,7 +60,7 @@ class TestSpireShield(unittest.TestCase):
         ):
             shield = SpireShield()
             intention = shield.determine_next_intention(1)
-            self.assertEqual(intention, "Bash")
+            self.assertEqual(intention.name, "Bash")
     
     def test_pattern_sequence(self):
         """Test Spire Shield turn pattern with Smash every 3 turns."""
@@ -72,12 +72,12 @@ class TestSpireShield(unittest.TestCase):
             ],
         ):
             shield = SpireShield()
-            self.assertEqual(shield.determine_next_intention(1), "Bash")
-            self.assertEqual(shield.determine_next_intention(2), "Fortify")
-            self.assertEqual(shield.determine_next_intention(3), "Smash")
-            self.assertEqual(shield.determine_next_intention(4), "Fortify")
-            self.assertEqual(shield.determine_next_intention(5), "Bash")
-            self.assertEqual(shield.determine_next_intention(6), "Smash")
+            self.assertEqual(shield.determine_next_intention(1).name, "Bash")
+            self.assertEqual(shield.determine_next_intention(2).name, "Fortify")
+            self.assertEqual(shield.determine_next_intention(3).name, "Smash")
+            self.assertEqual(shield.determine_next_intention(4).name, "Fortify")
+            self.assertEqual(shield.determine_next_intention(5).name, "Bash")
+            self.assertEqual(shield.determine_next_intention(6).name, "Smash")
 
 
 class TestSpireSpear(unittest.TestCase):
@@ -90,10 +90,10 @@ class TestSpireSpear(unittest.TestCase):
         self.helper._reset_game_state()
     
     def test_hp_range(self):
-        """Test Spire Spear has correct HP range (38-42)"""
+        """Test Spire Spear has correct HP range."""
         spear = SpireSpear()
-        self.assertGreaterEqual(spear.hp, 38)
-        self.assertLessEqual(spear.hp, 42)
+        self.assertGreaterEqual(spear.hp, 160)
+        self.assertLessEqual(spear.hp, 180)
     
     def test_is_elite(self):
         """Test Spire Spear is Elite type"""
@@ -118,7 +118,7 @@ class TestSpireSpear(unittest.TestCase):
         """Test Spire Spear starts with Burn Strike"""
         spear = SpireSpear()
         intention = spear.determine_next_intention(1)
-        self.assertEqual(intention, "Burn Strike")
+        self.assertEqual(intention.name, "Burn Strike")
     
     def test_pattern_sequence(self):
         """Test Spear turn pattern with Skewer every 3 turns from turn 2."""
@@ -127,11 +127,11 @@ class TestSpireSpear(unittest.TestCase):
             return_value=["Burn Strike", "Piercer"],
         ):
             spear = SpireSpear()
-            self.assertEqual(spear.determine_next_intention(1), "Burn Strike")
-            self.assertEqual(spear.determine_next_intention(2), "Skewer")
-            self.assertEqual(spear.determine_next_intention(3), "Burn Strike")
-            self.assertEqual(spear.determine_next_intention(4), "Piercer")
-            self.assertEqual(spear.determine_next_intention(5), "Skewer")
+            self.assertEqual(spear.determine_next_intention(1).name, "Burn Strike")
+            self.assertEqual(spear.determine_next_intention(2).name, "Skewer")
+            self.assertEqual(spear.determine_next_intention(3).name, "Burn Strike")
+            self.assertEqual(spear.determine_next_intention(4).name, "Piercer")
+            self.assertEqual(spear.determine_next_intention(5).name, "Skewer")
 
 
 class TestCorruptHeart(unittest.TestCase):
@@ -179,13 +179,13 @@ class TestCorruptHeart(unittest.TestCase):
             ],
         ):
             heart = CorruptHeart()
-            self.assertEqual(heart.determine_next_intention(1), "Debilitate")
-            self.assertEqual(heart.determine_next_intention(2), "Blood Shots")
-            self.assertEqual(heart.determine_next_intention(3), "Echo")
-            self.assertEqual(heart.determine_next_intention(4), "Buff")
-            self.assertEqual(heart.determine_next_intention(5), "Echo")
-            self.assertEqual(heart.determine_next_intention(6), "Blood Shots")
-            self.assertEqual(heart.determine_next_intention(7), "Buff")
+            self.assertEqual(heart.determine_next_intention(1).name, "Debilitate")
+            self.assertEqual(heart.determine_next_intention(2).name, "Blood Shots")
+            self.assertEqual(heart.determine_next_intention(3).name, "Echo")
+            self.assertEqual(heart.determine_next_intention(4).name, "Buff")
+            self.assertEqual(heart.determine_next_intention(5).name, "Echo")
+            self.assertEqual(heart.determine_next_intention(6).name, "Blood Shots")
+            self.assertEqual(heart.determine_next_intention(7).name, "Buff")
     
     def test_debilitate_actions(self):
         """Test Debilitate applies 3 debuffs and adds 5 status cards."""

@@ -40,6 +40,9 @@ class LLMClient:
         self.max_tokens = config.get("max_tokens") or 16384
         self.timeout = config.get("timeout", 120)
         self.stream = config.get("stream", False)
+        # New: reasoning/thinking limits to save cost and time
+        self.max_thinking_tokens = config.get("max_thinking_tokens", 0)  # 0 means unlimited
+        self.request_delay = config.get("request_delay", 0) # Delay in seconds before each request
 
     # ------------------------------------------------------------------
     # 公共接口
@@ -97,11 +100,15 @@ class LLMClient:
             return LLMResponse(thinking=reasoning.strip(), answer=content.strip(), raw_response=data)
 
         # 部分模型把 thinking 放在 <think>...</think> 标签里
-        if "<think" in content:
+        if "<think" in content or "<thought" in content:
             thinking, answer = self._extract_think_tags(content)
-            return LLMResponse(thinking=thinking, answer=answer, raw_response=data)
+            return LLMResponse(answer=answer, thinking=thinking, raw_response=data)
 
-        return LLMResponse(answer=content.strip(), raw_response=data)
+        # Log content if no thinking found for debugging
+        logger.debug(f"[LLM Sync] Raw content: {content[:100]}...")
+
+        # If no specific reasoning or tags, return content as answer, and reasoning (which is None here) as thinking.
+        return LLMResponse(answer=content.strip(), thinking=reasoning, raw_response=data)
 
     # ------------------------------------------------------------------
     # 流式
@@ -141,6 +148,11 @@ class LLMClient:
                         rc = delta.get("reasoning_content")
                         if rc:
                             thinking_chunks.append(rc)
+                            # Check thinking limit
+                            if self.max_thinking_tokens > 0 and len(thinking_chunks) > self.max_thinking_tokens:
+                                logger.warning(f"Thinking limit reached ({self.max_thinking_tokens} chunks). Aborting thought.")
+                                break # Stop processing this request stream
+                            
                             # 实时回调 - thinking 内容
                             if streaming_callback:
                                 streaming_callback("thinking", rc)
@@ -148,9 +160,9 @@ class LLMClient:
                         c = delta.get("content")
                         if c:
                             # 检查是否包含 <think 标签
-                            if "<think" in c:
+                            if "<think" in c or "<thought" in c:
                                 in_think_tag = True
-                            if "</think" in c:
+                            if "</think" in c or "</thought" in c:
                                 in_think_tag = False
                                 # 提取 </think 之前的内容作为 thinking
                                 thinking_chunks.append(c)
@@ -161,6 +173,14 @@ class LLMClient:
                             if in_think_tag:
                                 # 在 think 标签内，作为 thinking 处理
                                 thinking_chunks.append(c)
+                                # Check thinking limit (for <think> tags)
+                                if self.max_thinking_tokens > 0 and len(thinking_chunks) > self.max_thinking_tokens:
+                                    logger.warning(f"Thinking limit reached ({self.max_thinking_tokens} chunks).")
+                                    # We don't necessarily break here because we might want the answer, 
+                                    # but for cost saving, we might choose to just stop.
+                                    # For simplicity, let's just stop if it's too long.
+                                    break
+                                
                                 if streaming_callback:
                                     streaming_callback("thinking", c)
                             else:
@@ -180,7 +200,7 @@ class LLMClient:
         answer_text = "".join(answer_chunks).strip()
 
         # 如果 answer 里有 ॖ 标签（某些模型流式也会这样输出）
-        if not thinking_text and "<think" in answer_text:
+        if not thinking_text and ("<think" in answer_text or "<thought" in answer_text):
             thinking_text, answer_text = self._extract_think_tags(answer_text)
 
         return LLMResponse(
@@ -237,16 +257,21 @@ class LLMClient:
         从 content 中提取 <think>...</think> 标签内容。
         返回 (thinking: str | None, answer: str)
         """
-        match = re.search(r"<think[^>]*>(.*?)</think>", content, re.DOTALL)
+        match = re.search(r"<(?:think|thought)[^>]*>(.*?)</(?:think|thought)>", content, re.DOTALL)
         if match:
             thinking = match.group(1).strip()
-            answer = re.sub(r"<think[^>]*>.*?</think>", "", content, flags=re.DOTALL).strip()
+            answer = re.sub(r"<(?:think|thought)[^>]*>.*?</(?:think|thought)>", "", content, flags=re.DOTALL).strip()
             return thinking, answer
         # 标签未闭合时（流被截断），尽量提取已有思考内容
-        match_open = re.search(r"<think[^>]*>(.*)", content, re.DOTALL)
+        match_open = re.search(r"<(?:think|thought)[^>]*>(.*)", content, re.DOTALL)
         if match_open:
             thinking = match_open.group(1).strip()
-            answer = content[: content.index("<think")].strip()
+            # Find where the tag started to cut answer
+            tag_start_match = re.search(r"<(?:think|thought)", content)
+            if tag_start_match:
+                answer = content[:tag_start_match.start()].strip()
+            else: # Should not happen if match_open found something
+                answer = ""
             return thinking, answer
         return None, content
 
@@ -482,10 +507,24 @@ class LLMDecisionEngine(AIDecisionEngine):
         streaming_callback: StreamingCallback = None,
     ) -> tuple:
         """Async decision implementation. Returns (indices, thinking)."""
+        # Apply request delay if configured
+        if self.client.request_delay > 0:
+            await asyncio.sleep(self.client.request_delay)
+            
         messages = self._build_messages(title, options, context, max_select)
         
         try:
-            response = await self.client.complete(messages, streaming_callback)
+            # If we're simulate-streaming, we don't pass callback to client
+            # to avoid duplicate output if stream was somehow True
+            response = await self.client.complete(messages, streaming_callback if self.client.stream else None)
+            
+            # Simulate streaming if API stream is disabled but callback exists
+            if streaming_callback and not self.client.stream:
+                if response.thinking:
+                    await self._simulate_streaming(response.thinking, "thinking", streaming_callback)
+                if response.answer:
+                    await self._simulate_streaming(response.answer, "answer", streaming_callback)
+
             indices = self._parse_indices(response.answer, len(options))
             thinking = response.thinking
             
@@ -503,6 +542,19 @@ class LLMDecisionEngine(AIDecisionEngine):
             logger.error(f"LLM decision error: {e}")
             self._last_answer = None
             return [], None
+
+    async def _simulate_streaming(self, text: str, chunk_type: str, callback: StreamingCallback, delay: float = 0.005):
+        """Simulate streaming effect by dripping text to the callback."""
+        if not text or not callback:
+            return
+        
+        # Split into small bits (characters or word-ish chunks)
+        # 5-10 chars at a time feels smooth
+        chunk_size = 10
+        for i in range(0, len(text), chunk_size):
+            chunk = text[i:i+chunk_size]
+            callback(chunk_type, chunk)
+            await asyncio.sleep(delay)
     
     def _build_messages(
         self,
@@ -531,16 +583,16 @@ class LLMDecisionEngine(AIDecisionEngine):
         # Format context
         context_text = self._format_context(context) if context else "N/A"
         
-        # Build user content
-        user_content = f"## Decision Scenario\n{title}\n\n"
-        user_content += f"## Game State\n{context_text}\n\n"
-        user_content += f"## Options ({len(options)} total)\n{options_text}\n\n"
+        # Build user content (Ultra-short tags for extreme optimization)
+        user_content = f"# [SCENARIO]\n{title}\n\n"
+        user_content += f"# [STATE]\n{context_text}\n\n"
+        user_content += f"# [OPTIONS] ({len(options)})\n{options_text}\n\n"
         
         # Add selection instruction
         if max_select == 1:
-            user_content += "Select ONE option (output just the number, e.g., '2'):"
+            user_content += "Out valid index (e.g. '2'):"
         else:
-            user_content += f"Select up to {max_select} options (output numbers separated by commas, e.g., '1, 3'):"
+            user_content += f"Out indices (e.g. '1,3'):"
         
         # # Print full prompt for debugging
         # if self.debug:

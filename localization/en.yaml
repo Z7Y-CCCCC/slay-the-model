@@ -2520,6 +2520,27 @@ ai:
     
     Please output your selection (numbers):
 
+# === RUN MUTATIONS ===
+mutations:
+  thick_skin:
+    name: "Thick Skin"
+    desc: "Enemies have 50% more HP, but the elite pays out an extra relic."
+  frantic:
+    name: "Frantic"
+    desc: "Enemies start with 2 Strength, but the gold reward is doubled."
+  blinding:
+    name: "Blinding Trial"
+    desc: "Start the fight with 2 Weak, then choose two cards from the reward."
+  dark_energy:
+    name: "Dark Energy"
+    desc: "Gain 1 energy each turn, but lose 2 Max HP whenever you change floors."
+  blood_sacrifice:
+    name: "Blood Sacrifice"
+    desc: "Start combats with 2 Strength, but lose 3 HP at the start of every turn."
+  greed:
+    name: "Greed Curse"
+    desc: "Gain 50% more gold, but shop prices are increased by 50%."
+
 # === AI CONTEXT LABELS ===
 ai_context:
   player_status: Player Status

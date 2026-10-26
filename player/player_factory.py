@@ -9,11 +9,14 @@ def _import_character_cards(character: str):
         character: Character name (e.g., "ironclad", "silent")
     """
     character = character.lower()
-    if character in ("ironclad", "ironclad"):
+    if character in ("ironclad", "the_ironclad"):
         import cards.ironclad  # noqa: F401
     elif character in ("silent", "the_silent"):
-        # Add when Silent is implemented
-        pass
+        try:
+            import cards.silent  # noqa: F401
+        except ImportError:
+            # Silent cards may not be implemented yet.
+            pass
     # Add other characters here as they are implemented
 
 
@@ -76,7 +79,10 @@ def create_player(character=None):
         # Get card instance from registry
         card = get_registered_instance("card", class_name)
         if card is None:
-            raise ValueError(f"Card not found in registry: {card_id} (tried {class_name})")
+            raise ValueError(
+                f"Card not found in registry: {card_id} (tried {class_name}). "
+                f"Character '{char_config.display_name}' may not be fully implemented."
+            )
         starting_deck.append(card)
     
     # Initialize card manager with starting deck

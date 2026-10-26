@@ -51,7 +51,7 @@ class SpireSpear(Enemy):
             self._back_attack_manager = None
         super().on_death()
     
-    def determine_next_intention(self, floor: int) -> Optional[str]:
+    def determine_next_intention(self, floor: int):
         """Follow documented Spire Spear turn pattern."""
         self._turn_number += 1
 
@@ -69,4 +69,4 @@ class SpireSpear(Enemy):
 
         intention_name = self._pair_sequence[self._pair_index]
         self._pair_index += 1
-        return intention_name
+        return self.intentions[intention_name]

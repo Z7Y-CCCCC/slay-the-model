@@ -49,6 +49,11 @@ class ShopItem:
             if _has_relic("TheCourier", game_state):
                 final_price = int(final_price * 0.8)
 
+            # Greed is a run-level curse from cursed chests. Apply it after
+            # relic discounts so the drawback remains visible and consistent.
+            if getattr(game_state.player, "flags", {}).get("cursed_greed", False):
+                final_price = max(1, int(final_price * 1.5))
+
             # SmilingMask: card removal always 50 gold
             if self.item_type == "remove" and _has_relic("SmilingMask", game_state):
                 final_price = 50

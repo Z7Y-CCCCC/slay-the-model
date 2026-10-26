@@ -42,9 +42,10 @@ class Potion(Localizable):
         PotionName
         Description text
         """
-        result = self.local("name") # + f"\n{t('ui.rarity_label', 'Rarity: {rarity}', rarity=self.rarity.name.title())}"
-        # if hasattr(self, 'category') and self.category:
-        #     result += f"\n{t('ui.category_label', 'Category: {category}', category=self.category)}"
+        result = self.local("name")
+        result += f"\n{t('ui.rarity_label', 'Rarity: {rarity}', rarity=self.rarity.value)}"
+        if hasattr(self, 'category') and self.category:
+            result += f"\n{t('ui.category_label', 'Category: {category}', category=self.category)}"
         result += "\n" + self._get_dynamic_description()
         return result
     

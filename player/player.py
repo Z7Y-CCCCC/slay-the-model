@@ -36,6 +36,9 @@ class Player(Creature):
         self._gold = self.__class__.starting_gold
         self.potions = Collection(self.__class__.base_potion_limit)
         self.relics = Collection()
+        # Run-level modifiers introduced by elite affixes and cursed chests.
+        self.flags = {}
+        self.active_mutations = []
 
         # Combat-related properties
         self.max_energy = max_energy if max_energy is not None else self.__class__.base_energy

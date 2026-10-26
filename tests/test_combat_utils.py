@@ -109,8 +109,8 @@ class CombatTestHelper:
         """Create an enemy instance."""
         enemy = enemy_class()
         if hp is not None:
-            enemy.hp = hp
             enemy.max_hp = hp
+            enemy.hp = hp
         return enemy
     
     def start_combat(self, enemies: List[Enemy], floor: int = 1) -> Combat:

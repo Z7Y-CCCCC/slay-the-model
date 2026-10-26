@@ -1230,16 +1230,16 @@ class MapManager:
 
         lines = []
         lines.append("=" * 60)
-        lines.append(f"MAP VIEW - Act {act_num} (Floor {current_floor})")
+        lines.append(f"地图概览 - 第 {act_num} 幕 (当前层数: {current_floor})")
         lines.append("=" * 60)
         
         # Legend
         lines.append("")
-        lines.append("Legend:")
-        lines.append("  [M]=Monster  [E]=Elite  [$]=Merchant  [?]=Event")
-        lines.append("  [R]=Rest     [T]=Treasure  [B]=Boss  [N]=Neo")
-        lines.append("  *=Current   >=Available   ^=Visited")
-        lines.append("  Connections: /=left  |=center  \\=right")
+        lines.append("图例说明:")
+        lines.append("  [M]=普通怪  [E]=精英怪  [$]=商店商贩  [?]=未知事件")
+        lines.append("  [R]=休息营火  [T]=宝箱奖励  [B]=幕后首领  [N]=涅奥馈赠")
+        lines.append("  * =当前位置   > =下一步可选   ^ =已访问")
+        lines.append("  路径连接线: /=向左分支  |=垂直向上  \\=向右分支")
         lines.append("")
 
         # Display map floor by floor

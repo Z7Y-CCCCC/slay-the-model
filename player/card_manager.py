@@ -22,13 +22,31 @@ class CardManager:
             'exhaust_pile': [],
         }
 
+    @property
+    def deck(self) -> List[Card]:
+        return self.piles['deck']
+
+    @property
+    def draw_pile(self) -> List[Card]:
+        return self.piles['draw_pile']
+
+    @property
+    def discard_pile(self) -> List[Card]:
+        return self.piles['discard_pile']
+
+    @property
+    def hand(self) -> List[Card]:
+        return self.piles['hand']
+
+    @property
+    def exhaust_pile(self) -> List[Card]:
+        return self.piles['exhaust_pile']
+
     def reset_for_combat(self) -> None:
         # Gather all cards from all piles (they belong to the player's deck)
         
         # Move all cards to draw_pile, clear other piles
-        self.piles['draw_pile'] = []
-        for card in self.piles['deck']:
-            self.piles['draw_pile'].append(card.copy())
+        self.piles['draw_pile'] = [card.copy() for card in self.piles['deck']]
         self.piles['discard_pile'] = []
         self.piles['hand'] = []
         self.piles['exhaust_pile'] = []

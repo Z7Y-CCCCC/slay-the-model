@@ -1,92 +1,224 @@
-/* TUI Styles for Slay the Model */
+/* TUI Styles for Slay the Model - Ember Spire Edition */
+
+/* -- Palette (Deep & Premium Neon) -- */
+$background: #0b0c0f;
+$panel-bg: #14161b;
+$panel-raised: #1b1e25;
+$accent-neon: #d66a45;
+$accent-gold: #d8b26e;
+$accent-amber: #e59b4a;
+$accent-crimson: #d94b4b;
+$accent-cyan: #75c9c8;
+$accent-emerald: #82c88f;
+$accent-purple: #a78bba;
+$border-light: #353a43;
+$text-primary: #eee7da;
+$text-muted: #87909b;
 
 Screen {
-    background: $surface;
+    background: $background;
+    color: $text-primary;
 }
 
 #main-container {
     height: 1fr;
     width: 100%;
     layout: horizontal;
+    background: $background;
 }
 
+/* Panel Containers */
 #display-panel-container {
-    width: 2fr;
+    width: 2.1fr;
     height: 1fr;
-    border: solid $primary;
+    border: double $accent-neon;
+    background: $panel-bg;
     padding: 1;
-    overflow-y: auto;
+    border-title-align: center;
+    border-title-style: bold;
 }
 
 #selection-panel-container {
-    width: 2fr;
+    width: 1.9fr;
     height: 1fr;
-    border: solid $secondary;
+    border: heavy $border-light;
+    background: $panel-bg;
     padding: 1;
-    overflow-y: auto;
+    border-title-align: center;
+    border-title-style: bold;
 }
 
 #output-panel-container {
     width: 2fr;
     height: 1fr;
-    border: solid $accent;
+    border: round $border-light;
+    background: $panel-bg;
     padding: 1;
-    overflow-y: auto;
-}
-
-#display-panel {
-    height: auto;         /* Critical: lets content grow beyond panel height */
-    width: 100%;
+    border-title-align: center;
+    border-title-style: bold;
 }
 
 #display-content {
-    height: auto;         /* Must be auto, not 1fr or fixed */
     width: 100%;
-}
-
-#selection-panel {
-    height: auto;         /* Critical: lets content grow beyond panel height */
-    width: 100%;
+    height: 100%;
+    border: none;
+    padding: 0;
+    background: $panel-bg;
+    color: $text-primary;
+    scrollbar-color: $accent-neon;
 }
 
 #selection-content {
-    height: auto;         /* Must be auto, not 1fr or fixed */
     width: 100%;
+    height: auto;
+    min-height: 1fr;
+    padding: 1 1;
+    background: $panel-raised;
+    color: $text-primary;
 }
 
-#output-panel {
-    height: auto;         /* Critical: lets content grow beyond panel height */
+#selection-input {
+    dock: bottom;
     width: 100%;
+    height: 3;
+    margin-top: 1;
+    border: round $accent-neon;
+    background: #0f1115;
+    color: $text-primary;
+}
+
+#selection-input:focus {
+    border: double $accent-gold;
+}
+
+#selection-input.hidden {
+    display: none;
+}
+
+/* -- Room Specific Borders -- */
+.combat-border {
+    border: double $accent-crimson;
+    color: $accent-crimson;
+}
+
+.shop-border {
+    border: heavy $accent-amber;
+    color: $accent-amber;
+}
+
+.rest-border {
+    border: heavy $accent-cyan;
+    color: $accent-cyan;
+}
+
+.treasure-border {
+    border: heavy $accent-gold;
+    color: $accent-gold;
+}
+
+.event-border {
+    border: heavy $accent-purple;
+    color: $accent-purple;
+}
+
+.cursed-border {
+    border: heavy orchid;
+    color: orchid;
 }
 
 Header {
-    background: $primary;
-    color: $text;
-    text-align: center;
+    background: #101216;
+    color: $accent-gold;
+    text-style: bold;
 }
 
 Footer {
-    background: $surface-darken-1;
+    background: #101216;
+    color: $text-muted;
 }
 
-/* Dark mode */
-.-dark-mode Screen {
-    background: $surface-darken-3;
+/* -- Status Text Styles -- */
+.hp-bar-full {
+    color: $accent-emerald;
+    text-style: bold;
 }
 
-.-dark-mode #display-panel-container {
-    border: solid $primary-darken-1;
+.hp-bar-half {
+    color: $accent-amber;
+    text-style: bold;
 }
 
-.-dark-mode #selection-panel-container {
-    border: solid $secondary-darken-1;
+.hp-bar-low {
+    color: $accent-crimson;
+    text-style: bold;
 }
 
-.-dark-mode #output-panel-container {
-    border: solid $accent-darken-1;
+.gold-text {
+    color: $accent-gold;
+    text-style: bold;
 }
 
-/* Hidden class for AI mode */
-.hidden {
-    display: none;
+.energy-text {
+    color: $accent-cyan;
+    text-style: bold;
+}
+
+.floor-text {
+    color: $accent-purple;
+    text-style: bold;
+}
+
+/* -- Card Styles -- */
+.card-common {
+    color: white;
+}
+
+.card-uncommon {
+    color: $accent-cyan;
+    text-style: bold;
+}
+
+.card-rare {
+    color: $accent-gold;
+    text-style: bold;
+}
+
+.card-curse {
+    color: #ff5555;
+    text-style: italic;
+}
+
+.card-status {
+    color: $accent-purple;
+}
+
+/* -- Special Effects -- */
+.glow-text {
+    text-style: bold blink;
+    color: $accent-gold;
+}
+
+.flash-red {
+    background: $accent-crimson;
+    color: white;
+    text-style: bold;
+}
+
+/* -- Dynamic Flash Effects -- */
+.hp-flash {
+    border: double $accent-emerald;
+    background: #132118;
+}
+
+.energy-flash {
+    border: double $accent-cyan;
+    background: #102526;
+}
+
+/* -- New Premium Classes -- */
+.danger-flash {
+    background: #4a0007;
+    border: heavy $accent-crimson;
+    color: white;
+    text-style: bold blink;
 }

@@ -48,7 +48,7 @@ class CorruptHeart(Enemy):
         self.remove_power("Painful Stabs")
         self.add_power(BeatOfDeathPower(amount=1, owner=self))
     
-    def determine_next_intention(self, floor: int) -> Optional[str]:
+    def determine_next_intention(self, floor: int):
         """Follow documented Corrupt Heart turn pattern."""
         self._turn_number += 1
 
@@ -66,4 +66,4 @@ class CorruptHeart(Enemy):
 
         intention_name = self._pair_sequence[self._pair_index]
         self._pair_index += 1
-        return intention_name
+        return self.intentions[intention_name]

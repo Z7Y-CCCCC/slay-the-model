@@ -21,8 +21,8 @@ class TestGremlin(unittest.TestCase):
 
     def test_mad_gremlin_hp(self):
         gremlin = MadGremlin()
-        self.assertGreaterEqual(gremlin.hp, 8)
-        self.assertLessEqual(gremlin.hp, 15)
+        self.assertGreaterEqual(gremlin.hp, 20)
+        self.assertLessEqual(gremlin.hp, 24)
 
 if __name__ == '__main__':
     unittest.main()

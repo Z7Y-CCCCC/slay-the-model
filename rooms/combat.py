@@ -6,13 +6,14 @@ from typing import TYPE_CHECKING, List
 from actions.base import Action
 from actions.display import DisplayTextAction
 from utils.result_types import MultipleActionsResult, NoneResult
-from actions.reward import AddGoldAction, AddRandomPotionAction
+from actions.reward import AddGoldAction, AddRandomPotionAction, AddRandomRelicAction
 from actions.card import AddRandomCardAction, ChooseAddRandomCardAction, ChooseObtainCardAction
 from utils.result_types import GameStateResult
 from engine.combat import Combat
 from rooms.base import Room, BaseResult
 from utils.registry import register
 from utils.types import RoomType, RarityType, CardType, CombatType
+from tui.print_utils import tui_print
 
 @register("room")
 class CombatRoom(Room):
@@ -24,6 +25,7 @@ class CombatRoom(Room):
         self.enemies = enemies or []
         self.encounter_name = encounter_name  # Track encounter name for history
         self.combat = None
+        self.mutation = None  # Current active mutation
     
     def init(self):
         """Initialize the combat instance"""
@@ -33,6 +35,15 @@ class CombatRoom(Room):
             self.room_type == RoomType.ELITE
             and game_state.player is not None
         ):
+            # Try to get a mutation for Elite fights (Chaos Expansion)
+            from engine.mutations import get_random_elite_mutation
+            self.mutation = get_random_elite_mutation()
+            if self.mutation:
+                self.mutation.apply_to_enemies(self.enemies)
+                tui_print(
+                    f"[Elite Affix] {self.mutation.name}: {self.mutation.description}"
+                )
+
             for relic in game_state.player.relics:
                 if getattr(relic, "idstr", None) == "PreservedInsect":
                     if hasattr(relic, "apply_elite_hp_reduction"):
@@ -44,7 +55,8 @@ class CombatRoom(Room):
         
         self.combat = Combat(
             enemies=self.enemies,
-            combat_type=combat_type
+            combat_type=combat_type,
+            mutation=self.mutation,
         )
     
     def enter(self) -> BaseResult:
@@ -136,13 +148,26 @@ class CombatRoom(Room):
                     reward_options = relic.modify_card_reward_count(reward_options, combat_type_str)
             
             # 3 choose 1, rarity determined by encounter type
+            # 3 choose 1, rarity determined by encounter type
+            # Chaos: Handle extra card reward if applicable (Blinding)
+            obtain_count = 1
+            if self.mutation and self.mutation.id_str == "BLINDING":
+                obtain_count = 2
+
             actions.append(ChooseObtainCardAction(
                 total=reward_options,
                 namespace=game_state.player.namespace,
                 encounter_type=combat_type_str,
                 use_rolling_offset=True,
                 allow_upgraded=True,
+                count=obtain_count # Support multi-pick if blinding
             ))
+
+            # Thick Skin is a meaningful risk/reward choice: the elite also
+            # pays out an extra common relic when the fight is cleared.
+            if self.mutation:
+                for _ in range(self.mutation.get_extra_relics()):
+                    actions.append(AddRandomRelicAction(rarity=RarityType.COMMON))
         else:  # boss - 3 rare cards
             actions.append(ChooseAddRandomCardAction(
                 pile='deck',
@@ -190,4 +215,9 @@ class CombatRoom(Room):
         elif self.room_type == RoomType.ELITE:
             return rd.randint(25, 35)
         else:
-            return rd.randint(10, 20)
+            gold = rd.randint(10, 20)
+        
+        # Scale for Mutation
+        if self.mutation:
+            gold = int(gold * self.mutation.get_reward_multiplier())
+        return gold
